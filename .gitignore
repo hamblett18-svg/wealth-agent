@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.env
+.venv/
+venv/
+
+# Local data — regenerated at runtime via "Generate Sample Data"
+data/clients/
+data/client_intake.xlsx
+data/registered_clients.json
+
+# Keep the data directory itself (Streamlit Cloud needs it to exist)
+!data/.gitkeep
+
+# macOS
+.DS_Store
+
+# Streamlit local secrets (use Streamlit Cloud secrets UI instead)
+.streamlit/secrets.toml
