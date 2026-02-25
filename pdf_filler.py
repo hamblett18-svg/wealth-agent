@@ -6,6 +6,7 @@ Uses PyMuPDF (fitz), which handles AES-encrypted PDFs natively.
 
 import io
 import os
+import re
 import datetime
 
 import fitz  # pymupdf
@@ -54,14 +55,117 @@ def _parse_address(raw):
     return raw, "", "", "", "USA"
 
 
+_FORM_TITLES = {
+    "IWSPersonalApp_Dec2024.pdf":           "IWS Personal Account Application",
+    "IWSTrustApp_Dec2024.pdf":              "IWS Trust Account Application",
+    "Add_RemoveAdvisor_Brokerage_Jan2026.pdf": "Add / Remove Advisor – Brokerage",
+    "JournalRequest_May2021_rev.pdf":       "Journal / Internal Transfer Request",
+}
+
+# Prefixes stripped when humanising PDF field names
+_FIELD_PREFIXES = (
+    "PI_", "AS_", "ASU_", "AI_", "AO_", "DA_",
+    "JR_", "RAI_", "SD_", "CT_", "SaD_",
+)
+
+def _humanise_field(key: str) -> str:
+    """Turn a PDF field key like 'PI_PermAddressCity' into 'Perm Address City'."""
+    s = key
+    for p in _FIELD_PREFIXES:
+        if s.startswith(p):
+            s = s[len(p):]
+            break
+    # Split on capital letters / digits
+    s = re.sub(r"([A-Z][a-z]+|[0-9]+)", r" \1", s).strip()
+    return s or key
+
+
+def _generate_simple_pdf(filename: str, fields: dict) -> bytes:
+    """
+    Generate a clean data-sheet PDF when the form template file is unavailable.
+    Produces a professional summary of all form fields using PyMuPDF.
+    """
+    NAVY       = (0.05, 0.12, 0.35)
+    STRIPE     = (0.94, 0.96, 0.98)
+    MID_GRAY   = (0.50, 0.50, 0.50)
+    DARK       = (0.10, 0.10, 0.12)
+    WHITE      = (1.00, 1.00, 1.00)
+    ACCENT     = (0.04, 0.69, 0.47)
+
+    PAGE_W, PAGE_H = 612, 792
+    MARGIN = 40
+    ROW_H  = 30
+
+    title = _FORM_TITLES.get(filename, filename.replace(".pdf", "").replace("_", " "))
+
+    def _new_page(doc):
+        pg = doc.new_page(width=PAGE_W, height=PAGE_H)
+        # Navy header bar
+        pg.draw_rect(fitz.Rect(0, 0, PAGE_W, 76), fill=NAVY)
+        pg.insert_text((MARGIN, 30), "INTEGRATED WEALTH SERVICES",
+                        fontname="Helvetica-Bold", fontsize=13, color=WHITE)
+        pg.insert_text((MARGIN, 48), title,
+                        fontname="Helvetica", fontsize=10, color=(0.78, 0.85, 1.00))
+        pg.insert_text((MARGIN, 63),
+                        f"Pre-Fill Data Sheet  ·  {datetime.date.today().strftime('%B %d, %Y')}"
+                        "  ·  ADVISOR USE ONLY",
+                        fontname="Helvetica", fontsize=7, color=(0.62, 0.70, 0.90))
+        return pg, 88   # page + starting y
+
+    doc = fitz.open()
+    page, y = _new_page(doc)
+
+    display = [(k, str(v)) for k, v in fields.items() if v]
+
+    for idx, (k, v) in enumerate(display):
+        if y + ROW_H > PAGE_H - 36:
+            # Footer on current page before starting new one
+            page.draw_line((MARGIN, PAGE_H - 22), (PAGE_W - MARGIN, PAGE_H - 22),
+                           color=MID_GRAY, width=0.4)
+            page.insert_text((MARGIN, PAGE_H - 10),
+                              "CONFIDENTIAL — Advisor Use Only — IWS Pre-Fill Data Sheet",
+                              fontname="Helvetica", fontsize=7, color=MID_GRAY)
+            page, y = _new_page(doc)
+
+        # Alternating stripe
+        if idx % 2 == 0:
+            page.draw_rect(fitz.Rect(MARGIN, y, PAGE_W - MARGIN, y + ROW_H - 1),
+                           fill=STRIPE)
+
+        label = _humanise_field(k)
+        if len(label) > 40:
+            label = label[:39] + "…"
+        val_display = v[:72] + ("…" if len(v) > 72 else "")
+
+        page.insert_text((MARGIN + 6, y + 11), label,
+                          fontname="Helvetica", fontsize=8, color=MID_GRAY)
+        page.insert_text((MARGIN + 6, y + 24), val_display,
+                          fontname="Helvetica-Bold", fontsize=10, color=DARK)
+        y += ROW_H
+
+    # Footer on last page
+    page.draw_line((MARGIN, PAGE_H - 22), (PAGE_W - MARGIN, PAGE_H - 22),
+                   color=MID_GRAY, width=0.4)
+    page.insert_text((MARGIN, PAGE_H - 10),
+                      "CONFIDENTIAL — Advisor Use Only — IWS Pre-Fill Data Sheet",
+                      fontname="Helvetica", fontsize=7, color=MID_GRAY)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
 def _fill(filename, fields):
     """
     Fill a PDF form using PyMuPDF and return the bytes of the filled PDF.
-    Only writes fields that have a non-empty value.
+    If the form template is not present (e.g. on Streamlit Cloud), falls back
+    to generating a clean data-sheet PDF with all the pre-filled field values.
     """
     path = os.path.join(FORMS_DIR, filename)
     if not os.path.exists(path):
-        raise FileNotFoundError(f"Form PDF not found at: {path}")
+        # Template not available – produce a formatted data sheet instead
+        return _generate_simple_pdf(filename, fields)
 
     doc = fitz.open(path)
     for page in doc:
