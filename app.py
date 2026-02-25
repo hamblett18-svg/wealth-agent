@@ -41,41 +41,132 @@ st.set_page_config(
 
 HAS_API_KEY = bool(os.getenv("ANTHROPIC_API_KEY"))
 
+# ── Form catalog ──────────────────────────────────────────────────────────────
+FORMS_DIR = HERE / "forms"
+
+FORM_CATALOG = {
+    "IWSPersonalApp": {
+        "label": "IWS Personal / Joint Account Application",
+        "file":  "IWSPersonalApp_Dec2024.pdf",
+        "desc":  "Required for all Individual and Joint Brokerage / IRA accounts.",
+        "acct_types": ["Individual", "Joint Brokerage", "Traditional IRA", "Roth IRA", "Inherited IRA"],
+        "fields": [
+            "Account Holder 1 – First Name", "Account Holder 1 – Last Name",
+            "Account Holder 1 – DOB", "Account Holder 1 – SSN",
+            "Account Holder 2 – First Name", "Account Holder 2 – Last Name",
+            "Account Holder 2 – DOB", "Account Holder 2 – SSN",
+            "Address", "City", "State", "ZIP", "Phone", "Email",
+            "Employer", "Occupation", "Annual Income",
+            "Investment Objective", "Risk Tolerance", "Time Horizon",
+            "Advisor G-Number",
+        ],
+    },
+    "IWSTrustApp": {
+        "label": "IWS Trust Account Application",
+        "file":  "IWSTrustApp_Dec2024.pdf",
+        "desc":  "Required for all Trust, Estate, or Entity accounts.",
+        "acct_types": ["Trust", "Estate", "LLC", "Partnership"],
+        "fields": [
+            "Trust Name", "Trust Date", "Tax ID (EIN)",
+            "Trustee 1 – First Name", "Trustee 1 – Last Name",
+            "Trustee 2 – First Name", "Trustee 2 – Last Name",
+            "Grantor Name", "Address", "City", "State", "ZIP",
+            "Advisor G-Number",
+        ],
+    },
+    "AddRemoveAdvisor": {
+        "label": "Add / Remove Advisor – Brokerage",
+        "file":  "Add_RemoveAdvisor_Brokerage_Jan2026.pdf",
+        "desc":  "Required when client already has a Fidelity account and is adding the advisor.",
+        "acct_types": ["Add Advisor to Existing Account"],
+        "fields": [
+            "Account Holder Name", "Existing Account Number",
+            "Custodian (Fidelity / Schwab / etc.)",
+            "Advisor Name", "Advisor G-Number", "Action (Add / Remove)",
+        ],
+    },
+    "JournalRequest": {
+        "label": "Journal / Internal Transfer Request",
+        "file":  "JournalRequest_May2021_rev.pdf",
+        "desc":  "Internal transfer between two accounts at the same custodian.",
+        "acct_types": ["Internal Transfer"],
+        "fields": [
+            "From Account – Account Holder", "From Account – Account Number",
+            "To Account – Account Holder",   "To Account – Account Number",
+            "Transfer Amount", "Transfer Date", "Notes",
+        ],
+    },
+}
+
+ACCOUNT_TYPE_FORMS = {
+    "Individual":              ["IWSPersonalApp", "AddRemoveAdvisor"],
+    "Joint Brokerage":         ["IWSPersonalApp", "AddRemoveAdvisor"],
+    "Traditional IRA":         ["IWSPersonalApp", "AddRemoveAdvisor"],
+    "Roth IRA":                ["IWSPersonalApp", "AddRemoveAdvisor"],
+    "Inherited IRA":           ["IWSPersonalApp"],
+    "Trust":                   ["IWSTrustApp",    "AddRemoveAdvisor"],
+    "LLC / Business":          ["IWSTrustApp"],
+    "Internal Transfer":       ["JournalRequest"],
+    "Add Advisor to Existing": ["AddRemoveAdvisor"],
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
-# CSS — Navy / Gold enterprise theme
+# CSS — Futuristic AI theme
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
 /* ── Variables ── */
 :root {
-  --navy:   #0D1B3C;
-  --navy2:  #1A2F5A;
-  --navy3:  #2D4A7A;
-  --gold:   #C8A951;
-  --gold2:  #E8C878;
-  --white:  #FFFFFF;
-  --bg:     #EEF1F7;
-  --card:   #FFFFFF;
-  --border: #DDE3EE;
-  --txt:    #1A1F36;
-  --txt2:   #4A5568;
-  --txt3:   #718096;
-  --green:  #1E6B3C;
-  --red:    #9B1B1B;
-  --amber:  #B45309;
+  --bg:       #060D1A;
+  --bg2:      #0A1628;
+  --bg3:      #0E1E38;
+  --card:     rgba(10,22,40,0.85);
+  --glass:    rgba(255,255,255,0.03);
+  --cyan:     #00D4FF;
+  --cyan2:    #38BDF8;
+  --cyan-dim: rgba(0,212,255,0.18);
+  --purple:   #A78BFA;
+  --purple2:  #7C3AED;
+  --green:    #10B981;
+  --amber:    #F59E0B;
+  --red:      #EF4444;
+  --border:   rgba(0,212,255,0.12);
+  --border2:  rgba(0,212,255,0.25);
+  --txt:      #E2E8F0;
+  --txt2:     #94A3B8;
+  --txt3:     #475569;
+  --glow-sm:  0 0 12px rgba(0,212,255,0.25);
+  --glow-md:  0 0 24px rgba(0,212,255,0.35);
+  --glow-lg:  0 0 40px rgba(0,212,255,0.2), 0 0 80px rgba(124,58,237,0.1);
 }
 
 /* ── Base ── */
 html, body, [class*="css"] {
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   color: var(--txt);
 }
-.stApp { background: var(--bg); }
+.stApp {
+  background: var(--bg) !important;
+}
+.stApp::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0,212,255,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(124,58,237,0.05) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
 .main .block-container {
   padding-top: 1.25rem;
   padding-bottom: 5rem;
   max-width: 1440px;
+  position: relative;
+  z-index: 1;
 }
 footer { visibility: hidden; }
 
@@ -83,11 +174,12 @@ footer { visibility: hidden; }
 [data-testid="stSidebar"],
 [data-testid="stSidebar"] > div,
 [data-testid="stSidebarContent"] {
-  background: linear-gradient(175deg, #080F20 0%, #0D1B3C 55%, #152545 100%) !important;
+  background: linear-gradient(180deg, #04090F 0%, #060D1A 40%, #08111F 100%) !important;
+  border-right: 1px solid var(--border) !important;
 }
 [data-testid="stSidebar"] .stMarkdown p,
 [data-testid="stSidebar"] .stMarkdown,
-[data-testid="stSidebar"] span { color: #7A8DAA !important; }
+[data-testid="stSidebar"] span { color: var(--txt3) !important; }
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] label p,
 [data-testid="stSidebar"] .stRadio label,
@@ -95,142 +187,188 @@ footer { visibility: hidden; }
 [data-testid="stSidebar"] [data-testid="stRadio"] label,
 [data-testid="stSidebar"] [data-testid="stRadio"] label p,
 [data-testid="stSidebar"] [data-testid="stRadio"] div[data-testid="stMarkdownContainer"] p {
-  color: #FFFFFF !important;
+  color: #CBD5E1 !important;
   font-weight: 500 !important;
 }
-[data-testid="stSidebar"] .stCaption p { color: #3A4A62 !important; }
-[data-testid="stSidebar"] hr { border-color: rgba(200,169,81,0.15) !important; }
+[data-testid="stSidebar"] .stCaption p { color: var(--txt3) !important; }
+[data-testid="stSidebar"] hr {
+  border-color: var(--border) !important;
+  margin: 0.75rem 0 !important;
+}
 [data-testid="stSidebar"] .stButton > button {
-  background: rgba(200,169,81,0.08) !important;
-  border: 1px solid rgba(200,169,81,0.3) !important;
-  color: #C8A951 !important;
-  border-radius: 5px !important;
-  font-size: 0.82rem !important;
+  background: var(--glass) !important;
+  border: 1px solid var(--border2) !important;
+  color: var(--cyan) !important;
+  border-radius: 6px !important;
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
   width: 100%;
+  transition: all 0.2s ease !important;
 }
 [data-testid="stSidebar"] .stButton > button:hover {
-  background: rgba(200,169,81,0.2) !important;
-  border-color: rgba(200,169,81,0.7) !important;
+  background: var(--cyan-dim) !important;
+  box-shadow: var(--glow-sm) !important;
 }
 
 /* ── Typography ── */
-h1 {
-  color: var(--navy) !important;
-  font-size: 1.55rem !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.02em;
+h1, h2, h3 {
+  color: var(--txt) !important;
+  letter-spacing: -0.01em;
 }
-h2 {
-  color: var(--navy2) !important;
-  font-size: 1.1rem !important;
-  font-weight: 600 !important;
-  margin-top: 1.5rem !important;
-}
-h3 {
-  color: var(--navy2) !important;
-  font-size: 0.9rem !important;
-  font-weight: 600 !important;
-}
+h1 { font-size: 1.55rem !important; font-weight: 800 !important; }
+h2 { font-size: 1.05rem !important; font-weight: 700 !important; }
+h3 { font-size: 0.88rem !important; font-weight: 600 !important; }
 
-/* ── Buttons ── */
+/* ── Primary buttons ── */
 .stButton > button[kind="primary"] {
-  background: var(--navy) !important;
-  color: var(--gold) !important;
-  border: 1px solid rgba(200,169,81,0.5) !important;
-  border-radius: 6px !important;
+  background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(124,58,237,0.15)) !important;
+  color: var(--cyan) !important;
+  border: 1px solid var(--border2) !important;
+  border-radius: 7px !important;
   font-weight: 600 !important;
-  letter-spacing: 0.02em !important;
-  padding: 0.45rem 1.25rem !important;
-  transition: all 0.18s ease !important;
+  font-size: 0.88rem !important;
+  letter-spacing: 0.03em !important;
+  padding: 0.5rem 1.4rem !important;
+  transition: all 0.2s ease !important;
 }
 .stButton > button[kind="primary"]:hover {
-  background: var(--navy2) !important;
-  box-shadow: 0 4px 14px rgba(13,27,60,0.3) !important;
+  background: linear-gradient(135deg, rgba(0,212,255,0.25), rgba(124,58,237,0.25)) !important;
+  box-shadow: var(--glow-sm) !important;
   transform: translateY(-1px) !important;
 }
 .stButton > button:not([kind="primary"]) {
-  background: white !important;
-  color: var(--navy2) !important;
+  background: var(--glass) !important;
+  color: var(--txt2) !important;
   border: 1px solid var(--border) !important;
-  border-radius: 6px !important;
+  border-radius: 7px !important;
   font-weight: 500 !important;
+  font-size: 0.85rem !important;
+}
+.stButton > button:not([kind="primary"]):hover {
+  background: rgba(255,255,255,0.05) !important;
+  color: var(--txt) !important;
 }
 
 /* ── Metric cards ── */
 [data-testid="metric-container"],
 [data-testid="stMetric"] {
-  background: white !important;
+  background: var(--card) !important;
   border: 1px solid var(--border) !important;
-  border-radius: 8px !important;
+  border-radius: 10px !important;
   padding: 1rem 1.25rem !important;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
-  border-left: 4px solid var(--gold) !important;
+  box-shadow: 0 1px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  border-left: 3px solid var(--cyan) !important;
+  backdrop-filter: blur(12px) !important;
 }
 [data-testid="stMetricLabel"] p,
 [data-testid="stMetricLabel"] {
   color: var(--txt3) !important;
-  font-size: 0.66rem !important;
+  font-size: 0.64rem !important;
   font-weight: 700 !important;
   text-transform: uppercase !important;
-  letter-spacing: 0.08em !important;
+  letter-spacing: 0.1em !important;
 }
 [data-testid="stMetricValue"] {
-  color: var(--navy) !important;
+  color: var(--cyan) !important;
   font-weight: 800 !important;
+  font-family: 'JetBrains Mono', monospace !important;
 }
 
 /* ── DataFrames ── */
 [data-testid="stDataFrame"] {
   border: 1px solid var(--border) !important;
-  border-radius: 8px !important;
+  border-radius: 10px !important;
   overflow: hidden !important;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04) !important;
+  background: var(--card) !important;
 }
 
 /* ── Alerts ── */
-[data-testid="stAlert"] { border-radius: 7px !important; }
+[data-testid="stAlert"] {
+  border-radius: 8px !important;
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+}
 
 /* ── Chat ── */
 [data-testid="stChatMessage"] {
+  background: var(--card) !important;
   border: 1px solid var(--border) !important;
   border-radius: 10px !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
   margin-bottom: 0.6rem !important;
+  backdrop-filter: blur(8px) !important;
 }
 
-/* ── Inputs ── */
+/* ── Inputs / Selects ── */
 .stSelectbox [data-baseweb="select"] > div,
-.stTextInput input {
-  border-radius: 6px !important;
+.stTextInput input,
+.stTextArea textarea {
+  border-radius: 7px !important;
   border-color: var(--border) !important;
-  background: white !important;
+  background: var(--bg2) !important;
+  color: var(--txt) !important;
+}
+.stSelectbox [data-baseweb="select"] > div {
+  color: var(--txt) !important;
 }
 
 /* ── Expander ── */
 .streamlit-expanderHeader {
-  background: white !important;
+  background: var(--card) !important;
   border: 1px solid var(--border) !important;
   border-radius: 8px !important;
   font-weight: 600 !important;
-  color: var(--navy2) !important;
-  font-size: 0.87rem !important;
+  color: var(--txt2) !important;
+  font-size: 0.86rem !important;
+}
+.streamlit-expanderContent {
+  background: rgba(6,13,26,0.6) !important;
+  border: 1px solid var(--border) !important;
+  border-top: none !important;
 }
 
-/* ── Divider / HR ── */
-hr { border-color: var(--border) !important; margin: 1.25rem 0 !important; }
+/* ── Divider ── */
+hr {
+  border-color: var(--border) !important;
+  margin: 1.25rem 0 !important;
+}
 
 /* ── Status widget ── */
 [data-testid="stStatusWidget"] {
   border-radius: 8px !important;
   border: 1px solid var(--border) !important;
+  background: var(--card) !important;
 }
 
 /* ── File uploader ── */
 [data-testid="stFileUploader"] {
-  border: 2px dashed var(--border) !important;
-  border-radius: 8px !important;
-  background: white !important;
+  border: 2px dashed var(--border2) !important;
+  border-radius: 10px !important;
+  background: rgba(0,212,255,0.02) !important;
 }
+
+/* ── Radio ── */
+[data-testid="stRadio"] > div {
+  background: transparent !important;
+}
+
+/* ── Checkbox ── */
+.stCheckbox label p { color: var(--txt2) !important; }
+
+/* ── Info/warning/success/error native boxes ── */
+.stInfo    { background: rgba(0,212,255,0.06) !important; border-color: rgba(0,212,255,0.25) !important; }
+.stWarning { background: rgba(245,158,11,0.06) !important; border-color: rgba(245,158,11,0.25) !important; }
+.stSuccess { background: rgba(16,185,129,0.06) !important; border-color: rgba(16,185,129,0.25) !important; }
+.stError   { background: rgba(239,68,68,0.06) !important; border-color: rgba(239,68,68,0.25) !important; }
+
+/* ── Caption ── */
+.stCaption p { color: var(--txt3) !important; font-size: 0.75rem !important; }
+
+/* ── Tab-like step indicators ── */
+.ai-step-row { display: flex; gap: 0; margin-bottom: 2rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.ai-step { flex: 1; padding: 0.6rem 0.5rem; text-align: center; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; background: var(--bg2); color: var(--txt3); border-right: 1px solid var(--border); transition: all 0.2s; }
+.ai-step:last-child { border-right: none; }
+.ai-step.active { background: var(--cyan-dim); color: var(--cyan); }
+.ai-step.done { background: rgba(16,185,129,0.08); color: #10B981; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -240,16 +378,21 @@ hr { border-color: var(--border) !important; margin: 1.25rem 0 !important; }
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _html_page_header(title: str, subtitle: str = "", icon: str = "") -> None:
-    icon_html = f'<span style="font-size:1.6rem;margin-right:0.4rem;">{icon}</span>' if icon else ""
-    sub_html  = f'<p style="color:#718096;font-size:0.88rem;margin:0.25rem 0 0;">{subtitle}</p>' if subtitle else ""
+    icon_html = f'<span style="font-size:1.5rem;margin-right:0.4rem;">{icon}</span>' if icon else ""
+    sub_html  = (
+        f'<p style="color:#64748B;font-size:0.86rem;margin:0.3rem 0 0;">{subtitle}</p>'
+        if subtitle else ""
+    )
     st.markdown(f"""
 <div style="margin-bottom:1.5rem;">
   <div style="display:flex;align-items:center;">
     {icon_html}
-    <h1 style="margin:0;padding:0;">{title}</h1>
+    <h1 style="margin:0;padding:0;background:linear-gradient(135deg,#E2E8F0,#94A3B8);
+         -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+         background-clip:text;">{title}</h1>
   </div>
-  <div style="height:2px;background:linear-gradient(90deg,#C8A951 0%,rgba(200,169,81,0.15) 100%);
-       margin:0.4rem 0 0.3rem;border:none;"></div>
+  <div style="height:1px;background:linear-gradient(90deg,rgba(0,212,255,0.6) 0%,
+       rgba(124,58,237,0.3) 40%,transparent 100%);margin:0.5rem 0 0.3rem;"></div>
   {sub_html}
 </div>
 """, unsafe_allow_html=True)
@@ -259,10 +402,10 @@ def _html_section_header(title: str, icon: str = "") -> None:
     icon_html = f"{icon}&nbsp;" if icon else ""
     st.markdown(f"""
 <div style="display:flex;align-items:center;gap:0.4rem;margin:1.6rem 0 0.6rem;
-     padding-bottom:0.45rem;border-bottom:2px solid #DDE3EE;">
-  <span style="font-size:1.05rem;">{icon_html}</span>
-  <span style="color:#1A2F5A;font-size:0.78rem;font-weight:700;
-        text-transform:uppercase;letter-spacing:0.08em;">{title}</span>
+     padding-bottom:0.4rem;border-bottom:1px solid rgba(0,212,255,0.12);">
+  <span style="font-size:0.95rem;">{icon_html}</span>
+  <span style="color:rgba(0,212,255,0.8);font-size:0.72rem;font-weight:700;
+        text-transform:uppercase;letter-spacing:0.1em;">{title}</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -271,32 +414,35 @@ def _html_client_badge(name: str, has_excel: bool, has_registry: bool) -> None:
     tags = []
     if has_registry:
         tags.append(
-            '<span style="background:rgba(200,169,81,0.1);color:#7A5F1A;border:1px solid '
-            'rgba(200,169,81,0.35);border-radius:4px;padding:1px 8px;font-size:0.68rem;'
+            '<span style="background:rgba(167,139,250,0.1);color:#A78BFA;border:1px solid '
+            'rgba(167,139,250,0.3);border-radius:4px;padding:1px 8px;font-size:0.67rem;'
             'font-weight:700;">📋 Profile</span>'
         )
     if has_excel:
         tags.append(
-            '<span style="background:rgba(13,27,60,0.06);color:#1A2F5A;border:1px solid '
-            'rgba(13,27,60,0.15);border-radius:4px;padding:1px 8px;font-size:0.68rem;'
+            '<span style="background:rgba(0,212,255,0.08);color:#38BDF8;border:1px solid '
+            'rgba(0,212,255,0.25);border-radius:4px;padding:1px 8px;font-size:0.67rem;'
             'font-weight:700;">📊 Account Data</span>'
         )
     else:
         tags.append(
-            '<span style="background:rgba(180,83,9,0.08);color:#92400E;border:1px solid '
-            'rgba(180,83,9,0.25);border-radius:4px;padding:1px 8px;font-size:0.68rem;'
+            '<span style="background:rgba(245,158,11,0.08);color:#F59E0B;border:1px solid '
+            'rgba(245,158,11,0.25);border-radius:4px;padding:1px 8px;font-size:0.67rem;'
             'font-weight:700;">⚠ No Account Data</span>'
         )
     initials = "".join(p[0].upper() for p in name.split()[:2]) if name else "?"
     st.markdown(f"""
-<div style="display:flex;align-items:center;gap:0.85rem;padding:0.75rem 1rem;
-     background:white;border:1px solid #DDE3EE;border-radius:9px;margin-bottom:1rem;
-     box-shadow:0 1px 4px rgba(0,0,0,0.05);">
-  <div style="width:42px;height:42px;background:#0D1B3C;border-radius:50%;
+<div style="display:flex;align-items:center;gap:0.85rem;padding:0.85rem 1.1rem;
+     background:rgba(10,22,40,0.7);border:1px solid rgba(0,212,255,0.15);
+     border-radius:10px;margin-bottom:1rem;
+     box-shadow:0 0 20px rgba(0,212,255,0.06);backdrop-filter:blur(8px);">
+  <div style="width:44px;height:44px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(124,58,237,0.2));
+       border:1px solid rgba(0,212,255,0.3);border-radius:50%;
        display:flex;align-items:center;justify-content:center;
-       color:#C8A951;font-size:0.95rem;font-weight:800;flex-shrink:0;">{initials}</div>
+       color:#00D4FF;font-size:0.95rem;font-weight:800;flex-shrink:0;
+       box-shadow:0 0 12px rgba(0,212,255,0.2);">{initials}</div>
   <div>
-    <div style="font-weight:700;color:#0D1B3C;font-size:1.02rem;line-height:1.2;">{name}</div>
+    <div style="font-weight:700;color:#E2E8F0;font-size:1.05rem;line-height:1.2;">{name}</div>
     <div style="display:flex;gap:0.3rem;margin-top:4px;">{" ".join(tags)}</div>
   </div>
 </div>
@@ -304,36 +450,35 @@ def _html_client_badge(name: str, has_excel: bool, has_registry: bool) -> None:
 
 
 def _html_callout(text: str, level: str = "info") -> None:
-    """Advisor-grade callout box. level: 'info' | 'warning' | 'alert'"""
     cfg = {
-        "info":    ("#EBF8FF", "#2B6CB0", "#BEE3F8", "ℹ"),
-        "warning": ("#FFFBEB", "#92400E", "#FDE68A", "⚠"),
-        "alert":   ("#FFF5F5", "#9B1B1B", "#FEB2B2", "🚨"),
-        "success": ("#F0FFF4", "#1E6B3C", "#9AE6B4", "✓"),
+        "info":    ("rgba(0,212,255,0.06)",   "#38BDF8", "rgba(0,212,255,0.3)",   "ℹ"),
+        "warning": ("rgba(245,158,11,0.06)",  "#F59E0B", "rgba(245,158,11,0.3)",  "⚠"),
+        "alert":   ("rgba(239,68,68,0.06)",   "#EF4444", "rgba(239,68,68,0.3)",   "🚨"),
+        "success": ("rgba(16,185,129,0.06)",  "#10B981", "rgba(16,185,129,0.3)",  "✓"),
     }
     bg, tc, border, icon = cfg.get(level, cfg["info"])
     st.markdown(f"""
-<div style="background:{bg};border-left:4px solid {border};border-radius:0 7px 7px 0;
-     padding:0.65rem 1rem;margin:0.4rem 0;font-size:0.88rem;color:{tc};">
+<div style="background:{bg};border-left:3px solid {border};border-radius:0 8px 8px 0;
+     padding:0.6rem 1rem;margin:0.4rem 0;font-size:0.87rem;color:{tc};
+     backdrop-filter:blur(4px);">
   {icon}&nbsp; {text}
 </div>
 """, unsafe_allow_html=True)
 
 
 def _html_stat_row(stats: list) -> None:
-    """stats = [(label, value), ...]  — renders custom HTML stat cards in equal columns."""
     n = len(stats)
-    w = f"calc({100/n}% - {(n-1)*8/n:.1f}px)"
     cards = ""
     for label, value in stats:
         cards += f"""
-<div style="flex:1;background:white;border:1px solid #DDE3EE;border-radius:8px;
-     padding:0.9rem 1.1rem;box-shadow:0 1px 4px rgba(0,0,0,0.05);
-     border-left:4px solid #C8A951;">
-  <div style="color:#718096;font-size:0.65rem;font-weight:700;text-transform:uppercase;
-       letter-spacing:0.08em;">{label}</div>
-  <div style="color:#0D1B3C;font-size:1.3rem;font-weight:800;margin-top:2px;
-       font-variant-numeric:tabular-nums;">{value}</div>
+<div style="flex:1;background:rgba(10,22,40,0.7);border:1px solid rgba(0,212,255,0.12);
+     border-radius:10px;padding:0.9rem 1.1rem;
+     box-shadow:0 0 16px rgba(0,0,0,0.2),inset 0 1px 0 rgba(255,255,255,0.03);
+     border-left:3px solid rgba(0,212,255,0.5);backdrop-filter:blur(8px);">
+  <div style="color:#475569;font-size:0.62rem;font-weight:700;text-transform:uppercase;
+       letter-spacing:0.1em;">{label}</div>
+  <div style="color:#00D4FF;font-size:1.25rem;font-weight:800;margin-top:3px;
+       font-family:'JetBrains Mono',monospace;">{value}</div>
 </div>"""
     st.markdown(
         f'<div style="display:flex;gap:0.75rem;margin:0.75rem 0;">{cards}</div>',
@@ -344,19 +489,37 @@ def _html_stat_row(stats: list) -> None:
 def _html_footer() -> None:
     year = datetime.now().year
     st.markdown(f"""
-<div style="margin-top:3rem;padding:0.9rem 1.5rem;background:#0D1B3C;
-     border-radius:8px;display:flex;justify-content:space-between;align-items:center;">
-  <span style="color:#C8A951;font-size:0.72rem;font-weight:700;letter-spacing:0.1em;">
+<div style="margin-top:3rem;padding:0.85rem 1.5rem;
+     background:linear-gradient(90deg,rgba(0,212,255,0.05),rgba(124,58,237,0.05));
+     border:1px solid var(--border);border-radius:10px;
+     display:flex;justify-content:space-between;align-items:center;">
+  <span style="color:#00D4FF;font-size:0.7rem;font-weight:700;letter-spacing:0.1em;
+       text-shadow:0 0 8px rgba(0,212,255,0.4);">
     ⬡ {BRAND.upper()}
   </span>
-  <span style="color:rgba(255,255,255,0.3);font-size:0.68rem;letter-spacing:0.06em;">
+  <span style="color:#334155;font-size:0.67rem;letter-spacing:0.06em;">
     {PRODUCT} &nbsp;·&nbsp; © {year} &nbsp;·&nbsp; Powered by Claude
   </span>
-  <span style="color:rgba(255,255,255,0.25);font-size:0.68rem;">
+  <span style="color:#1E293B;font-size:0.67rem;">
     {datetime.now().strftime('%B %d, %Y')}
   </span>
 </div>
 """, unsafe_allow_html=True)
+
+
+def _html_step_bar(steps: list, active_idx: int) -> None:
+    """Render a horizontal step progress bar. steps = [label,...], active_idx = 0-based."""
+    parts = ""
+    for i, s in enumerate(steps):
+        if i < active_idx:
+            cls = "done"
+        elif i == active_idx:
+            cls = "active"
+        else:
+            cls = ""
+        num = f"{'✓' if i < active_idx else i+1}"
+        parts += f'<div class="ai-step {cls}">{num} &nbsp; {s}</div>'
+    st.markdown(f'<div class="ai-step-row">{parts}</div>', unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -535,9 +698,10 @@ def _do_register(intake: dict):
             rel = intake.get(f"Beneficiary {i} Rel", "")
             pct = intake.get(f"Beneficiary {i} Pct", "")
             bene_parts.append(f"{name} ({rel}) {pct}%")
-    spouse = intake.get("Spouse Name", "")
-    if spouse:
-        bene_parts.append(f"Spouse: {spouse}, DOB {intake.get('Spouse DOB','')}")
+    # Co-owner / joint account holder
+    co_owner = intake.get("Co-Account Holder Name", "")
+    if co_owner:
+        bene_parts.append(f"Co-Account Holder: {co_owner}, DOB {intake.get('Co-Account Holder DOB','')}")
     child_idx = 1
     while f"Child {child_idx} Name" in intake:
         cn  = intake[f"Child {child_idx} Name"]
@@ -600,7 +764,6 @@ def _client_has_excel(name: str) -> bool:
 
 
 def _all_known_clients() -> list:
-    """Unified list: all registered clients PLUS any Excel-only clients, deduped."""
     seen, names = set(), []
     for n in _registry_names() + _available_excel_clients():
         if n.lower() not in seen:
@@ -635,7 +798,6 @@ def _data_ready() -> bool:
 
 def _build_client_context(name: str) -> str:
     lines = [f"CLIENT: {name}", ""]
-
     entry = _registry_entry(name)
     if entry:
         intake = entry.get("intake", {})
@@ -677,7 +839,7 @@ def _build_client_context(name: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Elite AI Advisor system prompt
+# Elite AI Advisor system prompt (Marcus Reid)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _build_advisor_system_prompt(client_name: str, context: str) -> str:
@@ -733,13 +895,6 @@ Apply all of these lenses to every client, even when not asked:
 • EXPERIENCED: Write as someone who has navigated this exact situation dozens of times
 • MEETING-READY: When relevant, give the advisor the actual words to say to the client
 
-For "How should I approach this meeting?" → Provide a structured agenda with time estimates
-For "What are the red flags?" → Rank by severity with specific remediation steps
-For "What are the opportunities?" → Name the action and estimate the dollar impact
-For "Tax implications?" → Compute the actual numbers, not generic CPA advice
-For "What should I discuss?" → Prioritized talking points in the exact order to raise them
-For "Anything I'm missing?" → Comprehensive proactive sweep of the full picture
-
 If account data is missing, say so clearly in one sentence, then give the best analysis
 possible from the profile data available. Never invent data.
 
@@ -750,59 +905,141 @@ possible from the profile data available. Never invent data.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Onboarding AI helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _onboarding_ai_analyze(intake_text: str) -> str:
+    """Ask Claude to extract account types, funding paths, and form recommendations."""
+    if not HAS_API_KEY:
+        return json.dumps({
+            "account_holders": ["Primary Holder"],
+            "account_types": ["Individual"],
+            "funding_path": "Add Advisor to Existing Fidelity Account",
+            "recommended_forms": ["IWSPersonalApp", "AddRemoveAdvisor"],
+            "notes": "Mock mode — real analysis requires ANTHROPIC_API_KEY",
+        })
+    prompt = f"""You are a wealth management operations specialist. Analyze this client intake data and return a JSON object with:
+- "account_holders": list of full names of account holders
+- "account_types": list of account types needed (e.g. ["Individual", "Joint Brokerage", "Traditional IRA", "Trust"])
+- "funding_path": one of "Add Advisor to Existing Account", "Internal Transfer (Journal Request)", "External Transfer", "New Money"
+- "recommended_forms": list of form keys from: IWSPersonalApp, IWSTrustApp, AddRemoveAdvisor, JournalRequest
+- "notes": any important observations about the onboarding
+
+INTAKE DATA:
+{intake_text}
+
+Return ONLY valid JSON, no markdown, no explanation."""
+    client_api = anthropic.Anthropic()
+    try:
+        resp = client_api.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return resp.content[0].text.strip()
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+def _onboarding_ai_prefill(form_key: str, intake_data: dict, holders: list) -> str:
+    """Generate a pre-fill preview for a given form using intake data."""
+    form = FORM_CATALOG.get(form_key, {})
+    fields = form.get("fields", [])
+    if not HAS_API_KEY:
+        # Simple mock mapping
+        mock = {}
+        for f in fields:
+            fl = f.lower()
+            if "holder 1" in fl or ("account holder" in fl and "2" not in fl):
+                mock[f] = holders[0] if holders else "—"
+            elif "holder 2" in fl:
+                mock[f] = holders[1] if len(holders) > 1 else "—"
+            elif "address" in fl:
+                mock[f] = intake_data.get("Address", "—")
+            elif "city" in fl:
+                mock[f] = intake_data.get("City", "—")
+            elif "state" in fl:
+                mock[f] = intake_data.get("State", "—")
+            elif "zip" in fl:
+                mock[f] = intake_data.get("ZIP", "—")
+            elif "email" in fl:
+                mock[f] = intake_data.get("Email", "—")
+            elif "phone" in fl:
+                mock[f] = intake_data.get("Phone", "—")
+            else:
+                mock[f] = "—"
+        return json.dumps(mock, indent=2)
+
+    prompt = f"""Map the following client intake data to this form's fields.
+Return a JSON object where keys are the exact field names listed and values are what should be pre-filled from the intake data (or "—" if not available).
+
+FORM: {form.get('label','')}
+FIELDS TO FILL: {json.dumps(fields)}
+ACCOUNT HOLDERS: {json.dumps(holders)}
+INTAKE DATA: {json.dumps(intake_data, indent=2)}
+
+Return ONLY valid JSON, no markdown."""
+    client_api = anthropic.Anthropic()
+    try:
+        resp = client_api.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return resp.content[0].text.strip()
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Sidebar
 # ─────────────────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    # Brand header
     st.markdown(f"""
 <div style="padding:0.5rem 0 1.1rem;text-align:center;
-     border-bottom:1px solid rgba(200,169,81,0.15);margin-bottom:1rem;">
-  <div style="color:#C8A951;font-size:1.05rem;font-weight:800;letter-spacing:0.04em;
-       font-family:'Inter',sans-serif;">⬡ {BRAND}</div>
-  <div style="color:rgba(255,255,255,0.25);font-size:0.6rem;letter-spacing:0.12em;
+     border-bottom:1px solid rgba(0,212,255,0.1);margin-bottom:1rem;">
+  <div style="color:#00D4FF;font-size:1rem;font-weight:800;letter-spacing:0.04em;
+       text-shadow:0 0 12px rgba(0,212,255,0.5);">⬡ {BRAND}</div>
+  <div style="color:#1E3A5F;font-size:0.58rem;letter-spacing:0.14em;
        margin-top:3px;text-transform:uppercase;">{PRODUCT}</div>
 </div>
 """, unsafe_allow_html=True)
 
-    # API status
     if HAS_API_KEY:
         st.markdown(
-            '<div style="background:rgba(30,107,60,0.2);border:1px solid rgba(30,107,60,0.4);'
-            'border-radius:5px;padding:5px 10px;font-size:0.75rem;color:#6BCF8F;'
+            '<div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);'
+            'border-radius:6px;padding:5px 10px;font-size:0.73rem;color:#10B981;'
             'text-align:center;margin-bottom:0.5rem;">🟢 Live AI Mode</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            '<div style="background:rgba(180,83,9,0.15);border:1px solid rgba(180,83,9,0.35);'
-            'border-radius:5px;padding:5px 10px;font-size:0.75rem;color:#F6AD55;'
+            '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);'
+            'border-radius:6px;padding:5px 10px;font-size:0.73rem;color:#F59E0B;'
             'text-align:center;margin-bottom:0.5rem;">🟡 Mock Mode — no API key</div>',
             unsafe_allow_html=True,
         )
     st.divider()
 
-    # Navigation
     st.markdown(
-        '<div style="color:rgba(255,255,255,0.3);font-size:0.62rem;font-weight:700;'
+        '<div style="color:#1E3A5F;font-size:0.6rem;font-weight:700;'
         'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.4rem;">Navigation</div>',
         unsafe_allow_html=True,
     )
     page = st.radio(
         "nav",
-        ["Register Client", "Meeting Prep", "AI Advisor"],
+        ["Register Client", "Meeting Prep", "AI Advisor", "Client Onboarding"],
         label_visibility="collapsed",
     )
     st.divider()
 
-    # Generate sample data
     if st.button("⚙  Generate Sample Data", use_container_width=True):
         with st.spinner("Creating sample files…"):
             create_dummy_data()
         st.success("Sample data created.")
         st.rerun()
 
-    # Status indicators
     st.divider()
     if _data_ready():
         st.caption(f"✅ Data: `{DATA_DIR}/`")
@@ -812,16 +1049,16 @@ with st.sidebar:
     all_clients = _all_known_clients()
     if all_clients:
         st.markdown(
-            '<div style="color:rgba(255,255,255,0.3);font-size:0.62rem;font-weight:700;'
+            '<div style="color:#1E3A5F;font-size:0.6rem;font-weight:700;'
             'text-transform:uppercase;letter-spacing:0.1em;margin:0.5rem 0 0.3rem;">'
             'Known Clients</div>',
             unsafe_allow_html=True,
         )
         for cn in all_clients:
             has_xl  = _client_has_excel(cn)
-            dot_col = "#C8A951" if has_xl else "#4A5A78"
+            dot_col = "#00D4FF" if has_xl else "#1E3A5F"
             st.markdown(
-                f'<div style="font-size:0.78rem;color:#7A8DAA;padding:1px 0;">'
+                f'<div style="font-size:0.77rem;color:#334155;padding:1px 0;">'
                 f'<span style="color:{dot_col};">●</span> {cn}</div>',
                 unsafe_allow_html=True,
             )
@@ -882,19 +1119,25 @@ if page == "Register Client":
     selected_intake = None
 
     if len(parsed_clients) >= 2:
-        primary  = dict(parsed_clients[0])
-        spouse   = parsed_clients[1]
-        primary["Spouse Name"] = _full_name(spouse)
-        primary["Spouse DOB"]  = spouse.get("Date of Birth", "")
+        # ── Joint / multi-party form: both are primary account holders ──────
+        holder1 = dict(parsed_clients[0])
+        holder2 = parsed_clients[1]
+        # Store co-owner info on the primary record (for CRM notes)
+        holder1["Co-Account Holder Name"] = _full_name(holder2)
+        holder1["Co-Account Holder DOB"]  = holder2.get("Date of Birth", "")
+        # Additional parties beyond 2 treated as children
         children = parsed_clients[2:]
         for idx, child in enumerate(children, start=1):
-            primary[f"Child {idx} Name"] = _full_name(child)
-            primary[f"Child {idx} DOB"]  = child.get("Date of Birth", "")
-        selected_intake = primary
-        summary = f"👨‍👩‍👧 **Primary:** {_full_name(primary)}   |   **Spouse:** {primary['Spouse Name']}"
-        if children:
-            summary += f"   |   **Children:** {', '.join(_full_name(c) for c in children)}"
-        st.info(summary)
+            holder1[f"Child {idx} Name"] = _full_name(child)
+            holder1[f"Child {idx} DOB"]  = child.get("Date of Birth", "")
+        selected_intake = holder1
+        # Display both as primary account holders
+        name1 = _full_name(holder1)
+        name2 = holder1["Co-Account Holder Name"]
+        st.info(
+            f"👥 **Account Holder 1:** {name1}   |   **Account Holder 2:** {name2}"
+            + (f"   |   **Additional:** {', '.join(_full_name(c) for c in children)}" if children else "")
+        )
     elif len(parsed_clients) == 1:
         selected_intake = parsed_clients[0]
 
@@ -939,7 +1182,6 @@ if page == "Register Client":
         st.success(f"✅  **{name}** registered — Salesforce ID: `{sf_id}`")
         st.markdown("")
 
-        # Stat row
         _html_stat_row([
             ("Annual Income",  _fmt_money(intake.get("Annual Income",  0))),
             ("Net Worth",      _fmt_money(intake.get("Est. Net Worth", 0))),
@@ -965,10 +1207,11 @@ if page == "Register Client":
                 ("Occupation",   intake.get("Occupation","—")),
                 ("Lead Source",  intake.get("Referral Source","—")),
             ]
-            if intake.get("Spouse Name"):
-                rows.append(("Spouse",     intake["Spouse Name"]))
-            if intake.get("Spouse DOB"):
-                rows.append(("Spouse DOB", intake["Spouse DOB"]))
+            # Show co-account holder if present (joint account)
+            if intake.get("Co-Account Holder Name"):
+                rows.append(("Co-Account Holder",     intake["Co-Account Holder Name"]))
+            if intake.get("Co-Account Holder DOB"):
+                rows.append(("Co-Account Holder DOB", intake["Co-Account Holder DOB"]))
             ci = 1
             while f"Child {ci} Name" in intake:
                 dob = intake.get(f"Child {ci} DOB","")
@@ -1014,7 +1257,6 @@ elif page == "Meeting Prep":
         "📊",
     )
 
-    # ── Unified client selector (all registered + excel clients) ──────────
     all_clients = _all_known_clients()
     no_data     = _registered_without_data()
 
@@ -1047,7 +1289,6 @@ elif page == "Meeting Prep":
         if not all_clients:
             st.caption("No clients yet. Register one or generate sample data.")
 
-    # Upload account data for profile-only clients
     if no_data:
         with st.expander(
             f"📤 Upload account data — "
@@ -1061,7 +1302,7 @@ elif page == "Meeting Prep":
             )
             if upload_file:
                 if st.button("💾 Save account data", key="mp_save_btn", type="primary"):
-                    dest = _save_account_data(upload_target, upload_file.read())
+                    _save_account_data(upload_target, upload_file.read())
                     st.success(f"✅ Saved — {upload_target} now has full account data.")
                     st.rerun()
 
@@ -1103,7 +1344,6 @@ elif page == "Meeting Prep":
                 )
                 st.stop()
 
-    # ── Display results ────────────────────────────────────────────────────
     if "mp_result" in st.session_state:
         mp          = st.session_state["mp_result"]
         client_name = mp["client"]
@@ -1118,7 +1358,6 @@ elif page == "Meeting Prep":
         st.markdown("")
 
         if mode == "excel":
-            # ── Full account analysis ──────────────────────────────────────
             acct_rows  = data.get("Account Summary",              [])
             dc_rows    = data.get("Distributions & Contributions", [])
             tax_rows   = data.get("Tax & Realized GL",            [])
@@ -1268,15 +1507,13 @@ elif page == "Meeting Prep":
                 st.code(_build_one_pager(client_name, data), language=None)
 
         else:
-            # ── Profile-only brief (no Excel) ─────────────────────────────
             _html_callout(
                 "This client has a registration profile but no account data on file. "
-                "Upload an Excel workbook in the section above to unlock the full briefing.",
+                "Upload an Excel workbook above to unlock the full briefing.",
                 "warning",
             )
             st.markdown("")
 
-            # Financial profile stats
             income   = intake.get("Annual Income","")
             networth = intake.get("Est. Net Worth","")
             liquid   = intake.get("Liquid Assets","")
@@ -1307,9 +1544,8 @@ elif page == "Meeting Prep":
                     ("Lead Source",  intake.get("Referral Source","—")),
                 ]:
                     st.markdown(f"**{lbl}:** {val}")
-
-                if intake.get("Spouse Name"):
-                    st.markdown(f"**Spouse:** {intake['Spouse Name']}")
+                if intake.get("Co-Account Holder Name"):
+                    st.markdown(f"**Co-Account Holder:** {intake['Co-Account Holder Name']}")
                 ci = 1
                 while intake.get(f"Child {ci} Name"):
                     dob = intake.get(f"Child {ci} DOB","")
@@ -1325,7 +1561,6 @@ elif page == "Meeting Prep":
                     ("Time Horizon",    f"{horizon} years"),
                 ]:
                     st.markdown(f"**{lbl}:** {val}")
-
                 if intake.get("Notes"):
                     st.markdown("")
                     _html_section_header("Notes / Instructions", "📝")
@@ -1380,7 +1615,6 @@ elif page == "AI Advisor":
         _html_footer()
         st.stop()
 
-    # ── Client selector ────────────────────────────────────────────────────
     saved_aac   = st.session_state.get("aac_client", all_clients[0])
     default_i   = all_clients.index(saved_aac) if saved_aac in all_clients else 0
     sel_client  = st.selectbox("Select client", all_clients, index=default_i)
@@ -1393,7 +1627,6 @@ elif page == "AI Advisor":
     st.session_state.setdefault("aac_history", [])
     history: list = st.session_state["aac_history"]
 
-    # Client badge
     reg   = _registry_entry(sel_client)
     xl_ok = _client_has_excel(sel_client)
     _html_client_badge(sel_client, has_excel=xl_ok, has_registry=bool(reg))
@@ -1403,9 +1636,8 @@ elif page == "AI Advisor":
         _html_footer()
         st.stop()
 
-    # Suggested questions
     st.markdown(
-        '<div style="color:#718096;font-size:0.78rem;margin-bottom:0.75rem;">'
+        '<div style="color:#334155;font-size:0.77rem;margin-bottom:0.75rem;">'
         '💡 <em>Try asking:</em> &nbsp;'
         '"How should I approach this meeting?" &nbsp;·&nbsp; '
         '"What are the red flags?" &nbsp;·&nbsp; '
@@ -1416,12 +1648,10 @@ elif page == "AI Advisor":
     )
     st.divider()
 
-    # ── Chat history ───────────────────────────────────────────────────────
     for msg in history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # ── Input ──────────────────────────────────────────────────────────────
     question = st.chat_input(f"Ask about {sel_client}…")
 
     if question:
@@ -1435,7 +1665,6 @@ elif page == "AI Advisor":
             if HAS_API_KEY:
                 context       = _build_client_context(sel_client)
                 system_prompt = _build_advisor_system_prompt(sel_client, context)
-                # Pass full history (including just-appended question) — trim to last 30 turns
                 api_messages  = [{"role": m["role"], "content": m["content"]}
                                   for m in history[-30:]]
                 full_response = ""
@@ -1456,7 +1685,6 @@ elif page == "AI Advisor":
                     placeholder.markdown(full_response)
 
             else:
-                # ── Mock mode ─────────────────────────────────────────────
                 intake    = (reg or {}).get("intake", {})
                 _, _, ex  = _load_client_sheets(sel_client)
                 acct_rows = ex.get("Account Summary", [])
@@ -1475,7 +1703,7 @@ elif page == "AI Advisor":
                         f"**EXECUTIVE SUMMARY**\nProfile data available; no account file loaded.\n\n"
                     )
 
-                if any(w in q_lower for w in ("approach", "meeting", "agenda", "prepare", "talk")):
+                if any(w in q_lower for w in ("approach","meeting","agenda","prepare","talk")):
                     full_response = (
                         f"{_mock_preamble()}"
                         f"**DIRECT ANSWER — Suggested Meeting Agenda**\n\n"
@@ -1495,7 +1723,7 @@ elif page == "AI Advisor":
                         f"3. Check any open RMD requirements\n\n"
                         f"*(Mock mode — API key required for full AI analysis)*"
                     )
-                elif any(w in q_lower for w in ("aum", "total", "value", "balance", "portfolio")):
+                elif any(w in q_lower for w in ("aum","total","value","balance","portfolio")):
                     lines = [_mock_preamble(), "**DIRECT ANSWER — Portfolio Value**\n"]
                     for r in acct_rows:
                         lines.append(f"• {r.get('Account','')} ({r.get('Account #','')}): "
@@ -1510,36 +1738,13 @@ elif page == "AI Advisor":
                             f"{_mock_preamble()}"
                             f"**DIRECT ANSWER — Tax Picture**\n\n"
                             f"• Net realized G/L: **{_fmt_money(net_gl)}**\n"
-                            f"• Estimated taxes paid: **{_fmt_money(taxes)}**\n"
-                            f"• ST Gains: {_fmt_money(tax_map.get('Realized ST Gains',0))} | "
-                            f"LT Gains: {_fmt_money(tax_map.get('Realized LT Gains',0))}\n\n"
+                            f"• Estimated taxes paid: **{_fmt_money(taxes)}**\n\n"
                             f"**PROACTIVE INSIGHTS**\n"
                             f"• {'Consider TLH opportunities' if net_gl < 0 else 'Coordinate with CPA on gain offset'}\n\n"
                             f"*(Mock mode)*"
                         )
                     else:
                         full_response = "No tax data on file. Upload account workbook for tax analysis."
-                elif any(w in q_lower for w in ("allocation","drift","rebalance","asset","weight")):
-                    if alloc_rows:
-                        lines = [_mock_preamble(), "**DIRECT ANSWER — Allocation**\n"]
-                        for r in alloc_rows:
-                            drift = r.get("Drift","")
-                            try:
-                                dval = float(str(drift).replace("%","").replace("+",""))
-                                flag = " ⚠" if abs(dval) >= 2.0 else ""
-                            except ValueError:
-                                flag = ""
-                            lines.append(f"• {r.get('Asset Class','')}: {r.get('Current %','')}% "
-                                         f"(target {r.get('Target %','')}%, drift {drift}){flag}")
-                        full_response = "\n".join(lines) + "\n\n*(Mock mode)*"
-                    else:
-                        full_response = "No allocation data on file. Upload account workbook."
-                elif any(w in q_lower for w in ("risk","goal","objective","horizon","tolerance")):
-                    parts = [_mock_preamble(), "**DIRECT ANSWER — Investment Profile**\n"]
-                    for f in ("Risk Tolerance","Investment Goal","Time Horizon (yrs)"):
-                        if intake.get(f):
-                            parts.append(f"• {f}: **{intake[f]}**")
-                    full_response = "\n".join(parts) + "\n\n*(Mock mode)*"
                 else:
                     full_response = (
                         f"*(Mock mode — live AI requires an ANTHROPIC_API_KEY)*\n\n"
@@ -1557,7 +1762,6 @@ elif page == "AI Advisor":
 
             history.append({"role": "assistant", "content": full_response})
 
-    # ── Clear button + session info ────────────────────────────────────────
     if history:
         col1, col2 = st.columns([1, 4])
         with col1:
@@ -1567,5 +1771,409 @@ elif page == "AI Advisor":
         with col2:
             turns = len(history) // 2
             st.caption(f"Session: {turns} exchange{'s' if turns != 1 else ''} in memory")
+
+    _html_footer()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Page — Client Onboarding
+# ─────────────────────────────────────────────────────────────────────────────
+
+elif page == "Client Onboarding":
+    _html_page_header(
+        "Client Onboarding Workflow",
+        "AI-powered intake extraction → form selection → pre-fill → DocuSign → post-signature checklist.",
+        "🚀",
+    )
+
+    # ── Session state init ────────────────────────────────────────────────────
+    st.session_state.setdefault("ob_step",         0)   # 0=intake,1=forms,2=docusign,3=close
+    st.session_state.setdefault("ob_analysis",     None)
+    st.session_state.setdefault("ob_selected_forms", [])
+    st.session_state.setdefault("ob_prefills",     {})
+    st.session_state.setdefault("ob_intake",       {})
+    st.session_state.setdefault("ob_holders",      [])
+    st.session_state.setdefault("ob_envelope_sent", False)
+    st.session_state.setdefault("ob_post_checks",  {})
+
+    step = st.session_state["ob_step"]
+    _html_step_bar(["Intake", "Forms", "DocuSign", "Post-Close"], step)
+
+    # ── STEP 0: Intake ────────────────────────────────────────────────────────
+    if step == 0:
+        _html_section_header("Step 1 — Client Intake", "📥")
+
+        col_src, col_info = st.columns([1, 1])
+        with col_src:
+            intake_src = st.radio(
+                "Intake source",
+                ["Registered client", "Upload intake form (.xlsx)"],
+                key="ob_src",
+            )
+
+        ob_intake_data = {}
+
+        with col_info:
+            if intake_src == "Registered client":
+                all_clients = _all_known_clients()
+                if not all_clients:
+                    st.warning("No registered clients. Register one first.")
+                else:
+                    ob_client = st.selectbox("Select client", all_clients, key="ob_client_sel")
+                    entry = _registry_entry(ob_client)
+                    if entry:
+                        ob_intake_data = entry.get("intake", {})
+                        st.success(f"✅ Loaded intake data for **{ob_client}**")
+                    else:
+                        st.warning("No registration data found for this client.")
+            else:
+                ob_upload = st.file_uploader("Upload intake form (.xlsx)", type=["xlsx"], key="ob_upload")
+                if ob_upload:
+                    try:
+                        parsed = _read_intake_form(ob_upload)
+                        if parsed:
+                            # Merge all parsed parties into one intake dict with all fields
+                            ob_intake_data = dict(parsed[0])
+                            if len(parsed) >= 2:
+                                ob_intake_data["Co-Account Holder Name"] = _full_name(parsed[1])
+                                ob_intake_data["Co-Account Holder DOB"]  = parsed[1].get("Date of Birth","")
+                            st.success(f"✅ Parsed {len(ob_intake_data)} fields")
+                        else:
+                            st.error("Could not parse intake form.")
+                    except Exception as e:
+                        st.error(f"Error reading file: {e}")
+
+        if ob_intake_data:
+            with st.expander("📋 Preview Extracted Data", expanded=False):
+                display_rows = [(k, v) for k, v in ob_intake_data.items()
+                                if not k.startswith("__") and v]
+                df_preview = pd.DataFrame(display_rows, columns=["Field", "Value"])
+                st.dataframe(df_preview, use_container_width=True, hide_index=True)
+
+        st.markdown("")
+        if st.button("▶  Analyze with AI →", type="primary", disabled=not ob_intake_data):
+            with st.status("Analyzing intake data…", expanded=True) as sb:
+                st.write("🤖 Claude is analyzing account types, funding paths, and form requirements…")
+                intake_text = json.dumps(ob_intake_data, indent=2)
+                raw_analysis = _onboarding_ai_analyze(intake_text)
+                st.write("✅ Analysis complete")
+                sb.update(label="Analysis complete!", state="complete")
+
+            try:
+                analysis = json.loads(raw_analysis)
+            except Exception:
+                analysis = {
+                    "account_holders": [_full_name(ob_intake_data)],
+                    "account_types": ["Individual"],
+                    "funding_path": "Add Advisor to Existing Account",
+                    "recommended_forms": ["IWSPersonalApp", "AddRemoveAdvisor"],
+                    "notes": raw_analysis[:200],
+                }
+
+            st.session_state["ob_analysis"]       = analysis
+            st.session_state["ob_intake"]          = ob_intake_data
+            st.session_state["ob_holders"]         = analysis.get("account_holders", [_full_name(ob_intake_data)])
+            st.session_state["ob_selected_forms"]  = analysis.get("recommended_forms", [])
+            st.session_state["ob_step"]            = 1
+            st.rerun()
+
+    # ── STEP 1: Forms ─────────────────────────────────────────────────────────
+    elif step == 1:
+        analysis  = st.session_state["ob_analysis"] or {}
+        intake    = st.session_state["ob_intake"]
+        holders   = st.session_state["ob_holders"]
+        sel_forms = st.session_state["ob_selected_forms"]
+
+        _html_section_header("Step 2 — Form Selection & Pre-Fill", "📄")
+
+        # AI summary callout
+        acct_types   = analysis.get("account_types", [])
+        funding_path = analysis.get("funding_path", "")
+        ai_notes     = analysis.get("notes", "")
+        if holders:
+            _html_callout(
+                f"<strong>Account Holders:</strong> {' &nbsp;|&nbsp; '.join(holders)}",
+                "info",
+            )
+        if acct_types:
+            _html_callout(
+                f"<strong>Account Types Identified:</strong> {', '.join(acct_types)}",
+                "info",
+            )
+        if funding_path:
+            _html_callout(
+                f"<strong>Funding Path:</strong> {funding_path}",
+                "success",
+            )
+        if ai_notes:
+            _html_callout(f"<strong>AI Notes:</strong> {ai_notes}", "info")
+
+        st.markdown("")
+        _html_section_header("Select Forms to Prepare", "☑")
+
+        new_sel = []
+        for fkey, fdata in FORM_CATALOG.items():
+            recommended = fkey in sel_forms
+            checked = st.checkbox(
+                f"**{fdata['label']}**",
+                value=recommended,
+                key=f"ob_chk_{fkey}",
+                help=fdata["desc"],
+            )
+            if checked:
+                new_sel.append(fkey)
+            # Show form description inline
+            st.markdown(
+                f'<div style="font-size:0.77rem;color:#334155;margin:-0.5rem 0 0.5rem 1.5rem;">'
+                f'{fdata["desc"]}</div>',
+                unsafe_allow_html=True,
+            )
+
+        st.session_state["ob_selected_forms"] = new_sel
+
+        if new_sel:
+            st.markdown("")
+            _html_section_header("AI Pre-Fill Preview", "🤖")
+            st.caption("Claude will map intake data to each form's required fields.")
+
+            if st.button("🔍 Generate Pre-Fill Preview", type="primary"):
+                prefills = {}
+                with st.status("Generating pre-fill data…", expanded=True) as sb:
+                    for fkey in new_sel:
+                        fname = FORM_CATALOG[fkey]["label"]
+                        st.write(f"Filling: **{fname}**…")
+                        raw_pf = _onboarding_ai_prefill(fkey, intake, holders)
+                        try:
+                            prefills[fkey] = json.loads(raw_pf)
+                        except Exception:
+                            prefills[fkey] = {"raw": raw_pf}
+                    sb.update(label="Pre-fill complete!", state="complete")
+                st.session_state["ob_prefills"] = prefills
+                st.rerun()
+
+            # Show prefill previews
+            if st.session_state["ob_prefills"]:
+                for fkey in new_sel:
+                    pf = st.session_state["ob_prefills"].get(fkey, {})
+                    if pf:
+                        with st.expander(f"📝 {FORM_CATALOG[fkey]['label']} — Pre-Fill Data"):
+                            rows = [(k, v) for k, v in pf.items() if v and v != "—"]
+                            if rows:
+                                df_pf = pd.DataFrame(rows, columns=["Form Field", "Pre-Filled Value"])
+                                st.dataframe(df_pf, use_container_width=True, hide_index=True)
+                            else:
+                                st.caption("No pre-fill data available for this form.")
+
+        col_back, col_next = st.columns([1, 3])
+        with col_back:
+            if st.button("← Back"):
+                st.session_state["ob_step"] = 0
+                st.rerun()
+        with col_next:
+            if st.button("▶  Proceed to DocuSign →", type="primary", disabled=not new_sel):
+                st.session_state["ob_step"] = 2
+                st.rerun()
+
+    # ── STEP 2: DocuSign ──────────────────────────────────────────────────────
+    elif step == 2:
+        intake    = st.session_state["ob_intake"]
+        holders   = st.session_state["ob_holders"]
+        sel_forms = st.session_state["ob_selected_forms"]
+
+        _html_section_header("Step 3 — DocuSign Envelope", "✍️")
+
+        # Recipient info
+        email_primary = intake.get("Email", "")
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            holder1_name  = holders[0] if holders else (intake.get("First Name","") + " " + intake.get("Last Name","")).strip()
+            r1_name  = st.text_input("Account Holder 1 Name",  value=holder1_name,  key="ob_r1_name")
+            r1_email = st.text_input("Account Holder 1 Email", value=email_primary, key="ob_r1_email")
+        with col_r2:
+            if len(holders) > 1:
+                r2_name  = st.text_input("Account Holder 2 Name",  value=holders[1], key="ob_r2_name")
+                r2_email = st.text_input("Account Holder 2 Email", value="",         key="ob_r2_email")
+            else:
+                r2_name  = ""
+                r2_email = ""
+
+        env_subject = st.text_input(
+            "Envelope Subject",
+            value=f"Your Account Documents — {holder1_name}",
+            key="ob_env_subject",
+        )
+        env_message = st.text_area(
+            "Personal Message (optional)",
+            value=(
+                f"Dear {holder1_name},\n\n"
+                "Please review and sign the enclosed account documents at your earliest convenience. "
+                "If you have any questions, don't hesitate to reach out.\n\n"
+                "Thank you,"
+            ),
+            height=120,
+            key="ob_env_message",
+        )
+
+        st.markdown("")
+        _html_section_header("Forms to Include", "📎")
+        for fkey in sel_forms:
+            fdata = FORM_CATALOG.get(fkey, {})
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;">'
+                f'<span style="color:#10B981;font-size:0.85rem;">✓</span>'
+                f'<span style="color:#94A3B8;font-size:0.85rem;">{fdata.get("label",fkey)}</span>'
+                f'<span style="color:#334155;font-size:0.72rem;">({fdata.get("file","?")})</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        FORMS_DIR.mkdir(exist_ok=True)
+        missing_pdfs = [
+            FORM_CATALOG[fk]["file"] for fk in sel_forms
+            if not (FORMS_DIR / FORM_CATALOG[fk]["file"]).exists()
+        ]
+        if missing_pdfs:
+            _html_callout(
+                f"<strong>PDF files not uploaded:</strong> {', '.join(missing_pdfs)}. "
+                "Upload them to <code>forms/</code> to enable actual PDF pre-filling. "
+                "DocuSign sending will proceed with placeholders.",
+                "warning",
+            )
+
+        st.markdown("")
+        col_preview, col_send = st.columns([1, 2])
+        with col_preview:
+            if st.button("📧 Preview Welcome Email"):
+                st.session_state["ob_show_email_preview"] = True
+        with col_send:
+            if st.button("🚀 Send via DocuSign", type="primary"):
+                with st.status("Sending DocuSign envelope…", expanded=True) as sb:
+                    st.write(f"📧 Sending to: **{r1_email or r1_name}**")
+                    if r2_email:
+                        st.write(f"📧 CC: **{r2_email or r2_name}**")
+                    for fkey in sel_forms:
+                        st.write(f"📄 Queued: {FORM_CATALOG[fkey]['label']}")
+                    import time; time.sleep(1)
+                    sb.update(label="Envelope sent! (mock)", state="complete")
+                    st.session_state["ob_envelope_sent"] = True
+                    st.session_state["ob_step"] = 3
+                st.rerun()
+
+        if st.session_state.get("ob_show_email_preview"):
+            with st.expander("📧 Welcome Email Preview", expanded=True):
+                st.markdown(f"""
+**To:** {r1_email or r1_name}
+**Subject:** {env_subject}
+
+---
+
+{env_message}
+
+---
+*This message includes a DocuSign link for the following documents:*
+{chr(10).join(f'• {FORM_CATALOG[fk]["label"]}' for fk in sel_forms)}
+""")
+
+        col_back2, _ = st.columns([1, 3])
+        with col_back2:
+            if st.button("← Back"):
+                st.session_state["ob_step"] = 1
+                st.rerun()
+
+    # ── STEP 3: Post-Close Checklist ─────────────────────────────────────────
+    elif step == 3:
+        intake  = st.session_state["ob_intake"]
+        holders = st.session_state["ob_holders"]
+        sel_forms = st.session_state["ob_selected_forms"]
+
+        _html_section_header("Step 4 — Post-Signature Checklist", "✅")
+
+        holder1 = holders[0] if holders else "Client"
+
+        if st.session_state.get("ob_envelope_sent"):
+            _html_callout(
+                f"<strong>DocuSign envelope sent</strong> to {holder1}. "
+                "Track signature status below and complete post-close steps when signed.",
+                "success",
+            )
+
+        # Signature status tracker
+        _html_section_header("Signature Status", "📊")
+        sig_col1, sig_col2 = st.columns(2)
+        with sig_col1:
+            for fkey in sel_forms:
+                status_key = f"ob_sig_{fkey}"
+                st.session_state.setdefault(status_key, "Pending")
+                current = st.session_state[status_key]
+                color   = "#10B981" if current == "Signed" else "#F59E0B" if current == "Pending" else "#EF4444"
+                st.markdown(
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                    f'padding:0.4rem 0;border-bottom:1px solid rgba(0,212,255,0.08);">'
+                    f'<span style="color:#94A3B8;font-size:0.83rem;">{FORM_CATALOG[fkey]["label"]}</span>'
+                    f'<span style="color:{color};font-size:0.75rem;font-weight:700;">{current}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+        with sig_col2:
+            for fkey in sel_forms:
+                status_key = f"ob_sig_{fkey}"
+                new_status = st.selectbox(
+                    FORM_CATALOG[fkey]["label"],
+                    ["Pending", "Signed", "Declined"],
+                    index=["Pending","Signed","Declined"].index(st.session_state.get(status_key,"Pending")),
+                    key=f"ob_sigsel_{fkey}",
+                    label_visibility="collapsed",
+                )
+                st.session_state[status_key] = new_status
+
+        # Post-close action checklist
+        st.markdown("")
+        _html_section_header("Post-Signature Actions", "📋")
+
+        post_tasks = [
+            ("fidelity",     "Add accounts to Fidelity"),
+            ("black_diamond", "Add client to Black Diamond (reporting)"),
+            ("ima_billing",   "Send IMA to Billing & Compliance"),
+            ("welcome_call",  "Schedule welcome call with client"),
+            ("crm_update",    "Update CRM with account numbers and onboarding date"),
+        ]
+
+        all_done = True
+        for task_key, task_label in post_tasks:
+            session_key = f"ob_post_{task_key}"
+            st.session_state.setdefault(session_key, False)
+            checked = st.checkbox(task_label, value=st.session_state[session_key], key=f"ob_chk_post_{task_key}")
+            st.session_state[session_key] = checked
+            if not checked:
+                all_done = False
+
+        st.markdown("")
+        if all_done:
+            _html_callout(
+                f"<strong>🎉 Onboarding Complete!</strong> All post-close steps checked off for {holder1}.",
+                "success",
+            )
+        else:
+            remaining = sum(1 for k, _ in post_tasks if not st.session_state.get(f"ob_post_{k}", False))
+            _html_callout(
+                f"<strong>{remaining} step{'s' if remaining != 1 else ''} remaining</strong> in post-close checklist.",
+                "warning",
+            )
+
+        st.markdown("")
+        _html_section_header("Onboarding Summary", "📊")
+        _html_stat_row([
+            ("Account Holders", str(len(holders))),
+            ("Forms Prepared",  str(len(sel_forms))),
+            ("DocuSign Status", "Sent" if st.session_state.get("ob_envelope_sent") else "Not Sent"),
+            ("Post-Close",      f"{sum(1 for k,_ in post_tasks if st.session_state.get(f'ob_post_{k}'))}/{len(post_tasks)}"),
+        ])
+
+        st.markdown("")
+        if st.button("⟳  Start New Onboarding", type="primary"):
+            for key in list(st.session_state.keys()):
+                if key.startswith("ob_"):
+                    del st.session_state[key]
+            st.rerun()
 
     _html_footer()
