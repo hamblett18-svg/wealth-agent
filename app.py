@@ -901,21 +901,35 @@ def _load_client_sheets(client_name: str):
     return True, file_path, data
 
 
+def _normalize_name_key(name: str) -> str:
+    """Lowercase, strip special chars (apostrophes etc.) for dedup comparison."""
+    return re.sub(r"[^a-z0-9 ]", "", name.lower()).strip()
+
+
 def _available_excel_clients() -> list:
+    """Return client names from Excel files, preferring registry spelling."""
     if not CLIENTS_DIR.exists():
         return []
-    return [f.stem.replace("_", " ").title() for f in sorted(CLIENTS_DIR.glob("*.xlsx"))]
+    registry_map = {_normalize_name_key(n): n for n in _registry_names()}
+    result = []
+    for f in sorted(CLIENTS_DIR.glob("*.xlsx")):
+        raw_name = f.stem.replace("_", " ").title()
+        key = _normalize_name_key(raw_name)
+        result.append(registry_map.get(key, raw_name))
+    return result
 
 
 def _client_has_excel(name: str) -> bool:
-    return name.lower() in {n.lower() for n in _available_excel_clients()}
+    key = _normalize_name_key(name)
+    return key in {_normalize_name_key(n) for n in _available_excel_clients()}
 
 
 def _all_known_clients() -> list:
     seen, names = set(), []
     for n in _registry_names() + _available_excel_clients():
-        if n.lower() not in seen:
-            seen.add(n.lower())
+        key = _normalize_name_key(n)
+        if key not in seen:
+            seen.add(key)
             names.append(n)
     return sorted(names)
 
@@ -1340,7 +1354,15 @@ _DEMO_CLIENTS = [
 
 
 def _create_demo_excel(name: str, client_data: dict) -> None:
-    """Create a realistic demo Excel workbook for a client."""
+    """Create a realistic demo Excel workbook for a client.
+
+    Column names must match what the Client Profiles display code expects:
+    - Account Summary: 'Market Value' (not 'Total Value')
+    - Distributions & Contributions: 'Amount ($)' and 'Description'
+    - Tax & Realized GL: 'Category' and 'Amount ($)' (pivot summary)
+    - Beneficiaries: 'Pct' column
+    - Allocation: 'Market Value', 'Drift', 'Asset Class'
+    """
     aum = client_data.get("_aum", 1000000)
     fn = _name_to_filename(name)
     path = CLIENTS_DIR / fn
@@ -1348,68 +1370,93 @@ def _create_demo_excel(name: str, client_data: dict) -> None:
         return
 
     acct_num = f"FID-{abs(hash(name)) % 900000 + 100000}"
+    acct_type = client_data.get("Account Type", "Individual")
 
-    # Sheet 1: Account Summary
+    # Sheet 1: Account Summary — 'Market Value' is the key column
     summary = pd.DataFrame([{
-        "Account Number": acct_num,
-        "Account Type": client_data.get("Account Type", "Individual"),
-        "Account Owner": name,
-        "Total Value": aum,
-        "Cash & Equivalents": round(aum * 0.05, 2),
-        "Equity Value": round(aum * 0.62, 2),
-        "Fixed Income Value": round(aum * 0.28, 2),
-        "Alternatives": round(aum * 0.05, 2),
+        "Account":      f"{name} - {acct_type}",
+        "Account #":    acct_num,
+        "Account Type": acct_type,
+        "Custodian":    "Fidelity Investments",
+        "Market Value": aum,
+        "Cost Basis":   round(aum * 0.78, 2),
+        "Unrealized G/L": round(aum * 0.22, 2),
         "YTD Return %": round((hash(name) % 140 - 20) / 10, 1),
-        "Inception Date": "2018-03-15",
-        "Custodian": "Fidelity Investments",
-        "Advisor": "Smith Wealth Management",
     }])
 
-    # Sheet 2: Distributions & Contributions
-    dc_rows = []
-    for i, month in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]):
+    # Sheet 2: Distributions & Contributions — 'Amount ($)' + 'Description'
+    dob_str = client_data.get("Date of Birth", "01/01/1970")
+    try:
+        birth_year = int(dob_str.split("/")[2]) if "/" in dob_str else int(dob_str[-4:])
+        age = 2024 - birth_year
+    except Exception:
+        age = 50
+
+    dc_rows = [
+        {"Account": f"{name} - IRA",       "Date": "2024-01-15", "Description": "Quarterly Contribution",   "Amount ($)": 6500},
+        {"Account": f"{name} - IRA",       "Date": "2024-04-15", "Description": "Quarterly Contribution",   "Amount ($)": 6500},
+        {"Account": f"{name} - Brokerage", "Date": "2024-03-31", "Description": "Advisory Fee",             "Amount ($)": round(-aum * 0.0025, 2)},
+        {"Account": f"{name} - Brokerage", "Date": "2024-06-15", "Description": "Dividend Reinvestment",    "Amount ($)": round(aum * 0.004, 2)},
+        {"Account": f"{name} - Brokerage", "Date": "2024-09-30", "Description": "Advisory Fee",             "Amount ($)": round(-aum * 0.0025, 2)},
+        {"Account": f"{name} - Brokerage", "Date": "2024-12-15", "Description": "Year-End Dividend",        "Amount ($)": round(aum * 0.003, 2)},
+    ]
+    if age >= 73:
         dc_rows.append({
-            "Month": month, "Year": 2024,
-            "Contributions": round((hash(name + month) % 20000), 0),
-            "Withdrawals": round((hash(name + month + "w") % 8000), 0),
-            "Dividends": round(aum * 0.004 / 12, 2),
-            "Interest": round(aum * 0.002 / 12, 2),
+            "Account": f"{name} - IRA", "Date": "2024-12-01",
+            "Description": "RMD Distribution",
+            "Amount ($)": -round(aum * 0.04, 2),
         })
     dc = pd.DataFrame(dc_rows)
 
-    # Sheet 3: Tax & Realized G/L
+    # Sheet 3: Tax & Realized GL — pivot-style summary with 'Category' + 'Amount ($)'
+    net_st = round(abs(hash(name + "st")) % 8000 - 2000, 2)
+    net_lt = round(abs(hash(name + "lt")) % 15000 + 3000, 2)
     tax_rows = [
-        {"Security": "AAPL", "Shares": 120, "Cost Basis": 15200, "Proceeds": 22800,
-         "Realized GL": 7600, "Term": "Long"},
-        {"Security": "MSFT", "Shares": 85, "Cost Basis": 24800, "Proceeds": 31500,
-         "Realized GL": 6700, "Term": "Long"},
-        {"Security": "BND", "Shares": 200, "Cost Basis": 16400, "Proceeds": 15900,
-         "Realized GL": -500, "Term": "Short"},
-        {"Security": "VTI", "Shares": 60, "Cost Basis": 13200, "Proceeds": 16800,
-         "Realized GL": 3600, "Term": "Long"},
+        {"Category": "Realized ST Gains",    "Amount ($)": max(net_st, 0)},
+        {"Category": "Realized ST Losses",   "Amount ($)": min(net_st, 0)},
+        {"Category": "Realized LT Gains",    "Amount ($)": max(net_lt, 0)},
+        {"Category": "Realized LT Losses",   "Amount ($)": min(net_lt, 0)},
+        {"Category": "Qualified Dividends",  "Amount ($)": round(aum * 0.012, 2)},
+        {"Category": "Non-Qual Dividends",   "Amount ($)": round(aum * 0.003, 2)},
+        {"Category": "Interest Income",      "Amount ($)": round(aum * 0.008, 2)},
+        {"Category": "Est. Tax Paid",        "Amount ($)": round(max(net_lt + net_st, 0) * 0.22, 2)},
     ]
     tax = pd.DataFrame(tax_rows)
 
-    # Sheet 4: Beneficiaries
-    bene_rows = [
-        {"Beneficiary Name": "Spouse", "Relationship": "Spouse",
-         "Allocation %": 100, "SSN": "XXX-XX-0000", "DOB": "01/01/1970"},
-    ]
+    # Sheet 4: Beneficiaries — 'Pct' column required
+    co_name = client_data.get("Co-Account Holder Name", "")
+    bene_rows = []
+    if co_name:
+        bene_rows.append({"Account": f"{name} - Joint", "Beneficiary": co_name,
+                          "Relationship": "Spouse", "Pct": 100, "Type": "Primary"})
+    else:
+        bene_rows.append({"Account": f"{name} - {acct_type}", "Beneficiary": "Estate",
+                          "Relationship": "Estate", "Pct": 100, "Type": "Primary"})
     bene = pd.DataFrame(bene_rows)
 
-    # Sheet 5: Allocation
-    alloc_rows = [
-        {"Asset Class": "US Large Cap Equity", "Ticker": "VTI", "Value": round(aum*0.30, 2), "Weight %": 30},
-        {"Asset Class": "International Equity", "Ticker": "VXUS", "Value": round(aum*0.15, 2), "Weight %": 15},
-        {"Asset Class": "US Small/Mid Cap", "Ticker": "VXF", "Value": round(aum*0.10, 2), "Weight %": 10},
-        {"Asset Class": "Technology Sector", "Ticker": "VGT", "Value": round(aum*0.07, 2), "Weight %": 7},
-        {"Asset Class": "US Bonds", "Ticker": "BND", "Value": round(aum*0.18, 2), "Weight %": 18},
-        {"Asset Class": "TIPS / Inflation", "Ticker": "VTIP", "Value": round(aum*0.05, 2), "Weight %": 5},
-        {"Asset Class": "International Bonds", "Ticker": "BNDX", "Value": round(aum*0.05, 2), "Weight %": 5},
-        {"Asset Class": "Real Assets / Alts", "Ticker": "VNQ", "Value": round(aum*0.05, 2), "Weight %": 5},
-        {"Asset Class": "Cash & Equivalents", "Ticker": "VMFXX", "Value": round(aum*0.05, 2), "Weight %": 5},
+    # Sheet 5: Allocation — 'Market Value' + 'Drift' + 'Asset Class' required
+    target_alloc = [
+        ("US Large Cap Equity",  30),
+        ("International Equity", 15),
+        ("US Small/Mid Cap",     10),
+        ("Technology Sector",     7),
+        ("US Bonds",             18),
+        ("TIPS / Inflation",      5),
+        ("International Bonds",   5),
+        ("Real Assets / Alts",    5),
+        ("Cash & Equivalents",    5),
     ]
+    alloc_rows = []
+    for ac, target in target_alloc:
+        actual = target + (abs(hash(name + ac)) % 7 - 3)
+        drift  = actual - target
+        alloc_rows.append({
+            "Asset Class":  ac,
+            "Market Value": round(aum * actual / 100, 2),
+            "Actual %":     f"{actual}%",
+            "Target %":     f"{target}%",
+            "Drift":        f"{'+' if drift > 0 else ''}{drift}%",
+        })
     alloc = pd.DataFrame(alloc_rows)
 
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
@@ -1443,8 +1490,19 @@ def _bootstrap_demo_clients() -> None:
     """Add any missing demo clients to the registry.
 
     Only inserts — never removes user-added clients.
+    Regenerates demo Excel files if column structure was updated (v2 marker).
     """
     CLIENTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Delete stale demo Excel files if they predate the v2 column fix
+    _regen_marker = CLIENTS_DIR / ".v2_generated"
+    if not _regen_marker.exists():
+        for cd in _DEMO_CLIENTS:
+            old_path = CLIENTS_DIR / _name_to_filename(cd["Full Name"])
+            if old_path.exists():
+                old_path.unlink()
+        _regen_marker.touch()
+
     records = _load_registry()
     known_lower = {r.get("name", "").lower() for r in records}
     added = 0
@@ -1790,10 +1848,25 @@ if page == "📊 Dashboard":
         )
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Client Roster HTML table ──────────────────────────────────────────────
+    # ── Client Roster ─────────────────────────────────────────────────────────
     if all_c:
         _html_section_header("Client Roster", "👥")
-        _roster_rows = ""
+
+        # Header row
+        _th = '<span style="color:var(--txt3);font-size:0.68rem;font-weight:700;' \
+              'text-transform:uppercase;letter-spacing:0.08em;">'
+        _rh1, _rh2, _rh3, _rh4, _rh5 = st.columns([3, 2, 1.8, 1.5, 2])
+        with _rh1: st.markdown(f'{_th}Client</span>', unsafe_allow_html=True)
+        with _rh2: st.markdown(f'{_th}Account Type</span>', unsafe_allow_html=True)
+        with _rh3: st.markdown(f'{_th}AUM</span>', unsafe_allow_html=True)
+        with _rh4: st.markdown(f'{_th}Status</span>', unsafe_allow_html=True)
+        with _rh5: st.markdown(f'{_th}Completeness</span>', unsafe_allow_html=True)
+
+        st.markdown(
+            '<hr style="margin:0.3rem 0 0.1rem;border-color:var(--border);">',
+            unsafe_allow_html=True,
+        )
+
         for cn in all_c:
             has_xl  = _client_has_excel(cn)
             reg     = _registry_entry(cn)
@@ -1802,56 +1875,54 @@ if page == "📊 Dashboard":
             score_color = "#10B981" if score >= 80 else "#F59E0B" if score >= 50 else "#EF4444"
             _r_aum  = next((cd.get("_aum", 0) for cd in _DEMO_CLIENTS if cd["Full Name"].lower() == cn.lower()), 0)
             _r_aum_str = _fmt_money(_r_aum) if _r_aum else "—"
-            status_badge = (
-                f'<span style="background:rgba(16,185,129,0.1);color:#10B981;border:1px solid rgba(16,185,129,0.3);'
-                f'border-radius:4px;padding:1px 7px;font-size:0.67rem;font-weight:700;">Full Profile</span>'
+            status_html = (
+                '<span style="background:rgba(16,185,129,0.1);color:#10B981;'
+                'border:1px solid rgba(16,185,129,0.3);border-radius:4px;'
+                'padding:1px 7px;font-size:0.67rem;font-weight:700;">Full</span>'
                 if has_xl else
-                f'<span style="background:rgba(245,158,11,0.1);color:#F59E0B;border:1px solid rgba(245,158,11,0.3);'
-                f'border-radius:4px;padding:1px 7px;font-size:0.67rem;font-weight:700;">Intake Only</span>'
+                '<span style="background:rgba(245,158,11,0.1);color:#F59E0B;'
+                'border:1px solid rgba(245,158,11,0.3);border-radius:4px;'
+                'padding:1px 7px;font-size:0.67rem;font-weight:700;">Intake</span>'
             )
-            _roster_rows += f"""
-<tr style="border-bottom:1px solid var(--border);">
-  <td style="padding:0.55rem 0.75rem;color:var(--txt);font-weight:600;">{cn}</td>
-  <td style="padding:0.55rem 0.75rem;color:var(--txt2);">{acct}</td>
-  <td style="padding:0.55rem 0.75rem;color:var(--accent);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:0.82rem;">{_r_aum_str}</td>
-  <td style="padding:0.55rem 0.75rem;">{status_badge}</td>
-  <td style="padding:0.55rem 0.75rem;">
-    <div style="display:flex;align-items:center;gap:0.5rem;">
-      <div style="flex:1;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;">
-        <div style="width:{score}%;background:{score_color};height:100%;border-radius:4px;"></div>
-      </div>
-      <span style="color:{score_color};font-size:0.72rem;font-weight:700;min-width:2.5rem;">{score}%</span>
-    </div>
-  </td>
-</tr>"""
-        st.markdown(f"""
-<table style="width:100%;border-collapse:collapse;background:var(--card);
-              border:1px solid var(--border);border-radius:10px;overflow:hidden;">
-  <thead>
-    <tr style="background:var(--bg2);">
-      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
-                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Client</th>
-      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
-                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Account Type</th>
-      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
-                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">AUM</th>
-      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
-                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Status</th>
-      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
-                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Completeness</th>
-    </tr>
-  </thead>
-  <tbody>{_roster_rows}</tbody>
-</table>""", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        # View profile buttons
-        _btn_cols = st.columns(min(4, len(all_c)))
-        for _bi, _cn in enumerate(all_c[:4]):
-            with _btn_cols[_bi]:
-                if st.button(f"View {_cn.split()[0]} →", key=f"dash_view_{_cn}", use_container_width=True):
+            progress_html = (
+                f'<div style="display:flex;align-items:center;gap:0.4rem;padding-top:0.35rem;">'
+                f'<div style="flex:1;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;">'
+                f'<div style="width:{score}%;background:{score_color};height:100%;border-radius:4px;"></div>'
+                f'</div><span style="color:{score_color};font-size:0.7rem;font-weight:700;">{score}%</span>'
+                f'</div>'
+            )
+            _rc1, _rc2, _rc3, _rc4, _rc5 = st.columns([3, 2, 1.8, 1.5, 2])
+            with _rc1:
+                if st.button(
+                    cn, key=f"roster_{cn}",
+                    use_container_width=True,
+                    type="secondary",
+                ):
                     st.session_state["_jump_page"]    = "Client Profiles"
-                    st.session_state["mp_sel_client"] = _cn
+                    st.session_state["mp_sel_client"] = cn
                     st.rerun()
+            with _rc2:
+                st.markdown(
+                    f'<div style="padding-top:0.4rem;color:var(--txt2);font-size:0.82rem;">{acct}</div>',
+                    unsafe_allow_html=True,
+                )
+            with _rc3:
+                st.markdown(
+                    f'<div style="padding-top:0.4rem;color:var(--accent);font-weight:600;'
+                    f'font-family:\'JetBrains Mono\',monospace;font-size:0.8rem;">{_r_aum_str}</div>',
+                    unsafe_allow_html=True,
+                )
+            with _rc4:
+                st.markdown(
+                    f'<div style="padding-top:0.35rem;">{status_html}</div>',
+                    unsafe_allow_html=True,
+                )
+            with _rc5:
+                st.markdown(progress_html, unsafe_allow_html=True)
+            st.markdown(
+                '<hr style="margin:0;border-color:var(--border);opacity:0.5;">',
+                unsafe_allow_html=True,
+            )
     else:
         _html_callout(
             "No clients in the registry yet.",
