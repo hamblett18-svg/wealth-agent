@@ -1097,46 +1097,71 @@ with st.sidebar:
         )
     st.divider()
 
+    # ── Section: Advisor Tools ────────────────────────────────────────────────
     st.markdown(
-        '<div style="color:#1E3A5F;font-size:0.6rem;font-weight:700;'
-        'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.4rem;">Navigation</div>',
+        '<div style="color:#00D4FF;font-size:0.57rem;font-weight:700;'
+        'text-transform:uppercase;letter-spacing:0.14em;margin-bottom:0.35rem;">'
+        '— Advisor Tools</div>',
         unsafe_allow_html=True,
     )
     page = st.radio(
         "nav",
-        ["Register Client", "Meeting Prep", "AI Advisor", "Client Onboarding"],
+        [
+            "📊 Dashboard",
+            "📥 New Client",
+            "👥 Client Profiles",
+            "🤖 AI Advisor",
+            "📋 Operations",
+        ],
         label_visibility="collapsed",
     )
     st.divider()
+
+    all_clients = _all_known_clients()
+    n_clients   = len(all_clients)
+    n_pipeline  = len([c for c in all_clients if not _client_has_excel(c)])
+
+    # Quick stats bar
+    st.markdown(
+        f'<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">'
+        f'<div style="flex:1;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.15);'
+        f'border-radius:7px;padding:0.4rem 0.3rem;text-align:center;">'
+        f'<div style="color:#00D4FF;font-size:1rem;font-weight:700;">{n_clients}</div>'
+        f'<div style="color:#475569;font-size:0.58rem;letter-spacing:0.08em;">CLIENTS</div>'
+        f'</div>'
+        f'<div style="flex:1;background:rgba(167,139,250,0.07);border:1px solid rgba(167,139,250,0.15);'
+        f'border-radius:7px;padding:0.4rem 0.3rem;text-align:center;">'
+        f'<div style="color:#A78BFA;font-size:1rem;font-weight:700;">{n_pipeline}</div>'
+        f'<div style="color:#475569;font-size:0.58rem;letter-spacing:0.08em;">PIPELINE</div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Client list
+    if all_clients:
+        st.markdown(
+            '<div style="color:#334155;font-size:0.57rem;font-weight:700;'
+            'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.3rem;">'
+            'Active Clients</div>',
+            unsafe_allow_html=True,
+        )
+        for cn in all_clients:
+            has_xl  = _client_has_excel(cn)
+            status  = "🟢" if has_xl else "🟡"
+            st.markdown(
+                f'<div style="font-size:0.77rem;color:#94A3B8;padding:2px 0;'
+                f'border-bottom:1px solid rgba(255,255,255,0.03);">'
+                f'{status} {cn}</div>',
+                unsafe_allow_html=True,
+            )
+        st.markdown("<br>", unsafe_allow_html=True)
 
     if st.button("⚙  Generate Sample Data", use_container_width=True):
         with st.spinner("Creating sample files…"):
             create_dummy_data()
         st.success("Sample data created.")
         st.rerun()
-
-    st.divider()
-    if _data_ready():
-        st.caption(f"✅ Data: `{DATA_DIR}/`")
-    else:
-        st.caption("⚠ No data — click Generate above")
-
-    all_clients = _all_known_clients()
-    if all_clients:
-        st.markdown(
-            '<div style="color:#1E3A5F;font-size:0.6rem;font-weight:700;'
-            'text-transform:uppercase;letter-spacing:0.1em;margin:0.5rem 0 0.3rem;">'
-            'Known Clients</div>',
-            unsafe_allow_html=True,
-        )
-        for cn in all_clients:
-            has_xl  = _client_has_excel(cn)
-            dot_col = "#00D4FF" if has_xl else "#1E3A5F"
-            st.markdown(
-                f'<div style="font-size:0.77rem;color:#334155;padding:1px 0;">'
-                f'<span style="color:{dot_col};">●</span> {cn}</div>',
-                unsafe_allow_html=True,
-            )
 
     # ── Persistent AI Assistant ───────────────────────────────────────────────
     st.divider()
@@ -1240,15 +1265,105 @@ with st.sidebar:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Page — Register Client
+# Page — Dashboard
 # ─────────────────────────────────────────────────────────────────────────────
 
-if page == "Register Client":
+if page == "📊 Dashboard":
+    _html_page_header(
+        "Dashboard",
+        "Your wealth management command center. Quick access to clients, pipeline status, and key actions.",
+        "📊",
+    )
+
+    all_c     = _all_known_clients()
+    has_data  = [c for c in all_c if _client_has_excel(c)]
+    pipeline  = [c for c in all_c if not _client_has_excel(c)]
+
+    # ── KPI cards ────────────────────────────────────────────────────────────
+    kc1, kc2, kc3, kc4 = st.columns(4)
+    for col, label, val, color, sub in [
+        (kc1, "Total Clients",      str(len(all_c)),      "#00D4FF", "in registry"),
+        (kc2, "Full Profiles",      str(len(has_data)),   "#10B981", "with Excel data"),
+        (kc3, "Pipeline / Pending", str(len(pipeline)),   "#A78BFA", "profile only"),
+        (kc4, "Forms Available",    "4",                  "#F59E0B", "PDF templates loaded"),
+    ]:
+        with col:
+            st.markdown(
+                f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
+                f'border-top:2px solid {color};border-radius:10px;padding:1.1rem 1rem 0.9rem;">'
+                f'<div style="color:{color};font-size:2rem;font-weight:800;'
+                f'font-family:\'JetBrains Mono\',monospace;line-height:1;">{val}</div>'
+                f'<div style="color:#E2E8F0;font-size:0.78rem;font-weight:600;margin-top:0.3rem;">{label}</div>'
+                f'<div style="color:#475569;font-size:0.68rem;margin-top:0.1rem;">{sub}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Quick Actions ─────────────────────────────────────────────────────────
+    _html_section_header("Quick Actions", "⚡")
+    qa1, qa2, qa3, qa4 = st.columns(4)
+
+    def _qa_card(col, icon, title, desc, page_target, btn_label):
+        with col:
+            st.markdown(
+                f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
+                f'border-radius:10px;padding:1rem;min-height:110px;">'
+                f'<div style="font-size:1.4rem;margin-bottom:0.35rem;">{icon}</div>'
+                f'<div style="color:#E2E8F0;font-size:0.82rem;font-weight:600;">{title}</div>'
+                f'<div style="color:#475569;font-size:0.72rem;margin-top:0.2rem;">{desc}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button(btn_label, key=f"qa_{page_target}", use_container_width=True):
+                st.session_state["_nav_override"] = page_target
+                st.rerun()
+
+    _qa_card(qa1, "➕", "New Client",    "Upload intake & register", "📥 New Client",      "Start Intake →")
+    _qa_card(qa2, "👥", "Client Profiles", "View briefings & data",  "👥 Client Profiles", "Open Profiles →")
+    _qa_card(qa3, "🤖", "Ask AI Advisor", "Chat with Marcus Reid",   "🤖 AI Advisor",      "Open AI Chat →")
+    _qa_card(qa4, "📄", "Process Forms",  "Fill & download PDFs",    "📋 Operations",      "Go to Ops →")
+
+    # Honor nav override from quick actions
+    if "_nav_override" in st.session_state:
+        _override = st.session_state.pop("_nav_override")
+        st.session_state["_jump_page"] = _override
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Recent Clients ─────────────────────────────────────────────────────────
+    if all_c:
+        _html_section_header("Client Roster", "👥")
+        rows = []
+        for cn in all_c:
+            has_xl  = _client_has_excel(cn)
+            reg     = _registry_entry(cn)
+            acct    = reg.get("intake", {}).get("Account Type", "—") if reg else "—"
+            status  = "🟢 Full Profile" if has_xl else "🟡 Intake Only"
+            rows.append({"Client": cn, "Account Type": acct, "Status": status})
+        df_dash = pd.DataFrame(rows)
+        st.dataframe(df_dash, use_container_width=True, hide_index=True)
+    else:
+        _html_callout(
+            "No clients in the registry yet. "
+            "<strong>Generate sample data</strong> from the sidebar or go to <strong>Operations</strong> to add a real client.",
+            "info",
+        )
+
+    _html_footer()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Page — New Client Registration
+# ─────────────────────────────────────────────────────────────────────────────
+
+elif page == "📥 New Client":
     _html_page_header(
         "Register New Client",
         "Parse an Excel intake form and create a Salesforce CRM record. "
         "The client is instantly available across all platform features.",
-        "📋",
+        "📥",
     )
 
     col_l, col_r = st.columns([1, 2])
@@ -1424,12 +1539,12 @@ if page == "Register Client":
 # Page — Meeting Prep
 # ─────────────────────────────────────────────────────────────────────────────
 
-elif page == "Meeting Prep":
+elif page == "👥 Client Profiles":
     _html_page_header(
-        "Meeting Prep",
+        "Client Profiles",
         "Instant advisor brief for any registered client — account analysis, allocation, "
         "tax summary, and talking points.",
-        "📊",
+        "👥",
     )
 
     all_clients = _all_known_clients()
@@ -1773,7 +1888,7 @@ elif page == "Meeting Prep":
 # Page — AI Advisor
 # ─────────────────────────────────────────────────────────────────────────────
 
-elif page == "AI Advisor":
+elif page == "🤖 AI Advisor":
     _html_page_header(
         "AI Wealth Advisor",
         "Ask any question about a client's portfolio, tax picture, upcoming meeting, "
@@ -1954,11 +2069,11 @@ elif page == "AI Advisor":
 # Page — Client Onboarding
 # ─────────────────────────────────────────────────────────────────────────────
 
-elif page == "Client Onboarding":
+elif page == "📋 Operations":
     _html_page_header(
-        "Client Onboarding Workflow",
-        "AI-powered intake extraction → form selection → pre-fill → DocuSign → post-signature checklist.",
-        "🚀",
+        "Operations — Client Onboarding",
+        "AI-powered intake extraction → form selection → PDF fill → DocuSign → post-close checklist.",
+        "📋",
     )
 
     # ── Session state init ────────────────────────────────────────────────────
