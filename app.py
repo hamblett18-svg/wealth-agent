@@ -1071,7 +1071,7 @@ Return ONLY valid JSON, no markdown, no explanation."""
     client_api = anthropic.Anthropic()
     try:
         resp = client_api.messages.create(
-            model="claude-haiku-4-5",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -1121,7 +1121,7 @@ Return ONLY valid JSON, no markdown."""
     client_api = anthropic.Anthropic()
     try:
         resp = client_api.messages.create(
-            model="claude-haiku-4-5",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -1687,8 +1687,8 @@ if page == "📊 Dashboard":
 
     # ── Recent Activity Feed ──────────────────────────────────────────────────
     _activity = st.session_state.get("activity_log", [])
+    _html_section_header("Recent Activity", "🕐")
     if _activity:
-        _html_section_header("Recent Activity", "🕐")
         for _ev in _activity[:5]:
             _cl_html = (f'<span style="color:var(--txt2);">— {_ev["client"]}</span>'
                         if _ev["client"] else "")
@@ -1703,7 +1703,12 @@ if page == "📊 Dashboard":
                 f'</div>',
                 unsafe_allow_html=True,
             )
-        st.markdown("<br>", unsafe_allow_html=True)
+    else:
+        st.markdown(
+            '<span style="color:var(--txt3);font-size:0.82rem;">No recent activity</span>',
+            unsafe_allow_html=True,
+        )
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Client Roster HTML table ──────────────────────────────────────────────
     if all_c:
@@ -2067,6 +2072,14 @@ elif page == "👥 Client Profiles":
                     st.success(f"✅ Saved — {upload_target} now has full account data.")
                     st.rerun()
 
+    # ── Refresh Brief button ─────────────────────────────────────────────────
+    _rb_col1, _rb_col2 = st.columns([5, 1])
+    with _rb_col2:
+        if st.button("🔄 Refresh Brief", key="mp_refresh", use_container_width=True):
+            st.session_state.pop("mp_client", None)
+            st.session_state.pop("mp_result", None)
+            st.rerun()
+
     # ── Auto-load brief when client changes ──────────────────────────────────
     if client_name.strip() and client_name.strip() != st.session_state.get("mp_client", ""):
         st.session_state["mp_client"] = client_name.strip()
@@ -2082,10 +2095,12 @@ elif page == "👥 Client Profiles":
                 st.session_state["mp_result"] = {
                     "mode": "excel", "data": _data, "client": _cn, "reg": _reg,
                 }
+                _log_activity("Brief generated", _cn, "Full Excel profile")
         elif _reg:
             st.session_state["mp_result"] = {
                 "mode": "profile", "data": {}, "client": _cn, "reg": _reg,
             }
+            _log_activity("Brief generated", _cn, "Registration profile")
 
     if "mp_result" in st.session_state:
         mp          = st.session_state["mp_result"]
@@ -2272,6 +2287,15 @@ elif page == "👥 Client Profiles":
             with st.expander("📄 Full Text One-Pager (copy / print ready)"):
                 st.code(_build_one_pager(client_name, data), language=None)
 
+            _one_pager_txt = _build_one_pager(client_name, data)
+            st.download_button(
+                label="📥 Download Meeting Brief (.txt)",
+                data=_one_pager_txt,
+                file_name=f"{client_name.replace(' ', '_')}_meeting_brief.txt",
+                mime="text/plain",
+                use_container_width=False,
+            )
+
         else:
             _html_callout(
                 "This client has a registration profile but no account data on file. "
@@ -2368,7 +2392,7 @@ elif page == "🤖 AI Advisor":
     _html_page_header(
         "AI Wealth Advisor",
         "Ask any question about a client's portfolio, tax picture, upcoming meeting, "
-        "or financial plan. Powered by Claude with full client context.",
+        "or financial plan. AI-powered with full client context.",
         "🤖",
     )
 
@@ -2402,6 +2426,23 @@ elif page == "🤖 AI Advisor":
         _html_footer()
         st.stop()
 
+    # ── Data context panel ────────────────────────────────────────────────────
+    with st.expander("📂 Data Sources Available", expanded=False):
+        _reg_ctx    = _registry_entry(sel_client)
+        _xl_ctx     = _client_has_excel(sel_client)
+        _intake_ctx = (_reg_ctx or {}).get("intake", {})
+        _field_count = sum(1 for v in _intake_ctx.values() if v and not str(v).startswith("_"))
+        if _reg_ctx:
+            st.markdown(f"✅ **Registration Profile** — {_field_count} fields")
+        else:
+            st.markdown("❌ **Registration Profile** — not available")
+        if _xl_ctx:
+            _, _, _sheets_ctx = _load_client_sheets(sel_client)
+            for _sname, _srows in _sheets_ctx.items():
+                st.markdown(f"✅ **{_sname}** — {len(_srows)} records")
+        else:
+            st.markdown("❌ **Account Data** — no Excel workbook uploaded")
+
     # ── Question category chips ───────────────────────────────────────────────
     _html_section_header("Quick Questions", "💡")
     _chip_cols = st.columns(5)
@@ -2430,6 +2471,7 @@ elif page == "🤖 AI Advisor":
     question  = pending_q or typed_q
 
     if question:
+        _log_activity("AI question asked", sel_client, question[:60])
         history.append({"role": "user", "content": question})
         with st.chat_message("user"):
             st.markdown(question)
@@ -2446,7 +2488,7 @@ elif page == "🤖 AI Advisor":
                 client_api    = anthropic.Anthropic()
                 try:
                     with client_api.messages.stream(
-                        model      = "claude-sonnet-4-5",
+                        model      = "claude-sonnet-4-5-20250929",
                         max_tokens = 4096,
                         system     = system_prompt,
                         messages   = api_messages,
@@ -2455,8 +2497,14 @@ elif page == "🤖 AI Advisor":
                             full_response += text
                             placeholder.markdown(full_response + "▌")
                     placeholder.markdown(full_response)
-                except Exception as exc:
-                    full_response = f"⚠ API error: {exc}"
+                except anthropic.RateLimitError:
+                    full_response = "⏳ The AI service is temporarily busy. Please try again in a moment."
+                    placeholder.markdown(full_response)
+                except anthropic.APIConnectionError:
+                    full_response = "🔌 Unable to connect to AI service. Please check your connection and try again."
+                    placeholder.markdown(full_response)
+                except Exception:
+                    full_response = "⚠️ Something went wrong. Please try your question again."
                     placeholder.markdown(full_response)
 
             else:
@@ -2752,6 +2800,9 @@ elif page == "📋 Operations":
                             label="PDFs ready for download!" if filled else "Completed with errors",
                             state="complete" if filled else "error",
                         )
+                    if filled:
+                        _client_nm = holders[0] if holders else ""
+                        _log_activity("Forms filled", _client_nm, f"{len(filled)} form(s) ready")
                     st.session_state["ob_filled_pdfs"] = filled
                     st.rerun()
             else:
