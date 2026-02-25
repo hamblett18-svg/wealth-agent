@@ -4,10 +4,12 @@ AI Workforce Solutions — Wealth Intelligence Platform
 Streamlit UI  |  Run: streamlit run app.py
 """
 
+import io
 import os
 import re
 import sys
 import json
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -46,6 +48,9 @@ st.set_page_config(
 )
 
 HAS_API_KEY = bool(os.getenv("ANTHROPIC_API_KEY"))
+
+_DEMO_EMAIL = "demo@advisor.com"
+_DEMO_PASS  = "demo2026"
 
 # ── Form catalog ──────────────────────────────────────────────────────────────
 FORMS_DIR = HERE / "forms"
@@ -117,25 +122,22 @@ ACCOUNT_TYPE_FORMS = {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CSS — Futuristic AI theme
+# CSS — theme-aware injection
 # ─────────────────────────────────────────────────────────────────────────────
 
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
-
-/* ── Variables ── */
-:root {
+def _inject_css(theme: str = "light") -> None:
+    """Inject theme-aware CSS. Sidebar stays dark in both modes."""
+    if theme == "dark":
+        root_vars = """
   --bg:       #060D1A;
   --bg2:      #0A1628;
   --bg3:      #0E1E38;
   --card:     rgba(10,22,40,0.85);
   --glass:    rgba(255,255,255,0.03);
-  --cyan:     #00D4FF;
-  --cyan2:    #38BDF8;
-  --cyan-dim: rgba(0,212,255,0.18);
+  --accent:   #00D4FF;
+  --accent2:  #38BDF8;
+  --accent-dim: rgba(0,212,255,0.18);
   --purple:   #A78BFA;
-  --purple2:  #7C3AED;
   --green:    #10B981;
   --amber:    #F59E0B;
   --red:      #EF4444;
@@ -146,20 +148,71 @@ st.markdown("""
   --txt3:     #475569;
   --glow-sm:  0 0 12px rgba(0,212,255,0.25);
   --glow-md:  0 0 24px rgba(0,212,255,0.35);
-  --glow-lg:  0 0 40px rgba(0,212,255,0.2), 0 0 80px rgba(124,58,237,0.1);
-}
+  --glow-lg:  0 0 40px rgba(0,212,255,0.2);
+  --sidebar-bg: #04090F;
+  --sidebar-border: rgba(0,212,255,0.12);"""
+        app_bg = "var(--bg)"
+        main_txt = "var(--txt)"
+        content_txt = "#CBD5E1"
+        primary_btn_bg = "linear-gradient(135deg, rgba(0,212,255,0.15), rgba(124,58,237,0.15))"
+        primary_btn_color = "var(--accent)"
+        primary_btn_hover_bg = "linear-gradient(135deg, rgba(0,212,255,0.25), rgba(124,58,237,0.25))"
+        primary_btn_shadow = "var(--glow-sm)"
+        primary_btn_transform = "translateY(-1px)"
+        expander_content_bg = "rgba(6,13,26,0.6)"
+    else:
+        root_vars = """
+  --bg:       #F8FAFC;
+  --bg2:      #F1F5F9;
+  --bg3:      #E2E8F0;
+  --card:     #FFFFFF;
+  --glass:    rgba(255,255,255,0.8);
+  --accent:   #0F62FE;
+  --accent2:  #0043CE;
+  --accent-dim: rgba(15,98,254,0.12);
+  --purple:   #7C3AED;
+  --green:    #059669;
+  --amber:    #D97706;
+  --red:      #DC2626;
+  --border:   rgba(15,98,254,0.15);
+  --border2:  rgba(15,98,254,0.30);
+  --txt:      #1E293B;
+  --txt2:     #475569;
+  --txt3:     #94A3B8;
+  --glow-sm:  none;
+  --glow-md:  none;
+  --glow-lg:  none;
+  --sidebar-bg: #1E293B;
+  --sidebar-border: #334155;"""
+        app_bg = "var(--bg)"
+        main_txt = "var(--txt)"
+        content_txt = "var(--txt)"
+        primary_btn_bg = "var(--accent)"
+        primary_btn_color = "white"
+        primary_btn_hover_bg = "var(--accent2)"
+        primary_btn_shadow = "none"
+        primary_btn_transform = "none"
+        expander_content_bg = "var(--bg2)"
 
-/* ── Base — force light text everywhere in main area ── */
-html, body, [class*="css"] {
+    st.markdown(f"""<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Variables ── */
+:root {{{root_vars}
+}}
+
+/* ── Base ── */
+html, body, [class*="css"] {{
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  color: var(--txt) !important;
-}
-.stApp {
-  background: var(--bg) !important;
-  color: var(--txt) !important;
-}
+  color: {main_txt} !important;
+  font-size: 0.875rem;
+}}
+.stApp {{
+  background: {app_bg} !important;
+  color: {main_txt} !important;
+}}
 
-/* Main content text — override Streamlit's black defaults */
+/* Main content text */
 .main p,
 .main span,
 .main div,
@@ -177,275 +230,278 @@ html, body, [class*="css"] {
 [data-testid="stMarkdownContainer"] strong,
 [data-testid="column"] p,
 [data-testid="column"] span,
-[data-testid="column"] li {
-  color: #CBD5E1 !important;
-}
+[data-testid="column"] li {{
+  color: {content_txt} !important;
+  font-size: 0.875rem;
+}}
 
-/* Labels for inputs/radio/checkbox in main area */
+/* Labels */
 .main label p,
 .main .stRadio label p,
 .main .stCheckbox label p,
 .main [data-testid="stRadio"] label p,
 [data-testid="stWidgetLabel"] p,
-[data-testid="stWidgetLabel"] label {
-  color: #94A3B8 !important;
-}
+[data-testid="stWidgetLabel"] label {{
+  color: var(--txt2) !important;
+  font-size: 0.875rem;
+}}
 
-/* Strong / bold text slightly brighter */
+/* Strong text */
 .main .stMarkdown strong,
-[data-testid="stMarkdownContainer"] strong {
-  color: #E2E8F0 !important;
-}
+[data-testid="stMarkdownContainer"] strong {{
+  color: var(--txt) !important;
+}}
 
-/* st.info / st.warning / st.success / st.error text */
+/* Alerts */
 [data-testid="stAlert"] p,
-[data-testid="stAlert"] span {
-  color: #CBD5E1 !important;
-}
-.stApp::before {
+[data-testid="stAlert"] span {{
+  color: {content_txt} !important;
+}}
+.stApp::before {{
   content: '';
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background:
-    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0,212,255,0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(124,58,237,0.05) 0%, transparent 60%);
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0,212,255,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(124,58,237,0.03) 0%, transparent 60%);
   pointer-events: none;
   z-index: 0;
-}
-.main .block-container {
+}}
+.main .block-container {{
   padding-top: 1.25rem;
   padding-bottom: 5rem;
   max-width: 1440px;
   position: relative;
   z-index: 1;
-}
-footer { visibility: hidden; }
+}}
+footer {{ visibility: hidden; }}
 
-/* ── Sidebar ── */
+/* ── Sidebar — always dark ── */
 [data-testid="stSidebar"],
 [data-testid="stSidebar"] > div,
-[data-testid="stSidebarContent"] {
-  background: linear-gradient(180deg, #04090F 0%, #060D1A 40%, #08111F 100%) !important;
-  border-right: 1px solid var(--border) !important;
-}
+[data-testid="stSidebarContent"] {{
+  background: linear-gradient(180deg, var(--sidebar-bg) 0%, #060D1A 40%, #08111F 100%) !important;
+  border-right: 1px solid var(--sidebar-border) !important;
+}}
 [data-testid="stSidebar"] .stMarkdown p,
 [data-testid="stSidebar"] .stMarkdown,
-[data-testid="stSidebar"] span { color: var(--txt3) !important; }
+[data-testid="stSidebar"] span {{ color: #475569 !important; }}
 [data-testid="stSidebar"] label,
 [data-testid="stSidebar"] label p,
 [data-testid="stSidebar"] .stRadio label,
 [data-testid="stSidebar"] .stRadio label p,
 [data-testid="stSidebar"] [data-testid="stRadio"] label,
 [data-testid="stSidebar"] [data-testid="stRadio"] label p,
-[data-testid="stSidebar"] [data-testid="stRadio"] div[data-testid="stMarkdownContainer"] p {
+[data-testid="stSidebar"] [data-testid="stRadio"] div[data-testid="stMarkdownContainer"] p {{
   color: #CBD5E1 !important;
   font-weight: 500 !important;
-}
-[data-testid="stSidebar"] .stCaption p { color: var(--txt3) !important; }
-[data-testid="stSidebar"] hr {
-  border-color: var(--border) !important;
+}}
+[data-testid="stSidebar"] .stCaption p {{ color: #475569 !important; }}
+[data-testid="stSidebar"] hr {{
+  border-color: rgba(0,212,255,0.12) !important;
   margin: 0.75rem 0 !important;
-}
-[data-testid="stSidebar"] .stButton > button {
-  background: var(--glass) !important;
-  border: 1px solid var(--border2) !important;
-  color: var(--cyan) !important;
+}}
+[data-testid="stSidebar"] .stButton > button {{
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid rgba(0,212,255,0.25) !important;
+  color: #00D4FF !important;
   border-radius: 6px !important;
   font-size: 0.8rem !important;
   font-weight: 500 !important;
   width: 100%;
   transition: all 0.2s ease !important;
-}
-[data-testid="stSidebar"] .stButton > button:hover {
-  background: var(--cyan-dim) !important;
-  box-shadow: var(--glow-sm) !important;
-}
+}}
+[data-testid="stSidebar"] .stButton > button:hover {{
+  background: rgba(0,212,255,0.18) !important;
+  box-shadow: 0 0 12px rgba(0,212,255,0.25) !important;
+}}
 
 /* ── Typography ── */
-h1, h2, h3 {
+h1, h2, h3 {{
   color: var(--txt) !important;
   letter-spacing: -0.01em;
-}
-h1 { font-size: 1.55rem !important; font-weight: 800 !important; }
-h2 { font-size: 1.05rem !important; font-weight: 700 !important; }
-h3 { font-size: 0.88rem !important; font-weight: 600 !important; }
+}}
+h1 {{ font-size: 1.55rem !important; font-weight: 800 !important; }}
+h2 {{ font-size: 1.05rem !important; font-weight: 700 !important; }}
+h3 {{ font-size: 0.875rem !important; font-weight: 600 !important; }}
 
 /* ── Primary buttons ── */
-.stButton > button[kind="primary"] {
-  background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(124,58,237,0.15)) !important;
-  color: var(--cyan) !important;
+.stButton > button[kind="primary"] {{
+  background: {primary_btn_bg} !important;
+  color: {primary_btn_color} !important;
   border: 1px solid var(--border2) !important;
   border-radius: 7px !important;
   font-weight: 600 !important;
-  font-size: 0.88rem !important;
+  font-size: 0.875rem !important;
   letter-spacing: 0.03em !important;
   padding: 0.5rem 1.4rem !important;
   transition: all 0.2s ease !important;
-}
-.stButton > button[kind="primary"]:hover {
-  background: linear-gradient(135deg, rgba(0,212,255,0.25), rgba(124,58,237,0.25)) !important;
-  box-shadow: var(--glow-sm) !important;
-  transform: translateY(-1px) !important;
-}
-.stButton > button:not([kind="primary"]) {
+}}
+.stButton > button[kind="primary"]:hover {{
+  background: {primary_btn_hover_bg} !important;
+  box-shadow: {primary_btn_shadow} !important;
+  transform: {primary_btn_transform} !important;
+}}
+.stButton > button:not([kind="primary"]) {{
   background: var(--glass) !important;
   color: var(--txt2) !important;
   border: 1px solid var(--border) !important;
   border-radius: 7px !important;
   font-weight: 500 !important;
-  font-size: 0.85rem !important;
-}
-.stButton > button:not([kind="primary"]):hover {
-  background: rgba(255,255,255,0.05) !important;
+  font-size: 0.875rem !important;
+}}
+.stButton > button:not([kind="primary"]):hover {{
+  background: var(--bg3) !important;
   color: var(--txt) !important;
-}
+}}
 
 /* ── Metric cards ── */
 [data-testid="metric-container"],
-[data-testid="stMetric"] {
+[data-testid="stMetric"] {{
   background: var(--card) !important;
   border: 1px solid var(--border) !important;
   border-radius: 10px !important;
   padding: 1rem 1.25rem !important;
-  box-shadow: 0 1px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04) !important;
-  border-left: 3px solid var(--cyan) !important;
+  box-shadow: 0 1px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  border-left: 3px solid var(--accent) !important;
   backdrop-filter: blur(12px) !important;
-}
+}}
 [data-testid="stMetricLabel"] p,
-[data-testid="stMetricLabel"] {
+[data-testid="stMetricLabel"] {{
   color: var(--txt3) !important;
   font-size: 0.64rem !important;
   font-weight: 700 !important;
   text-transform: uppercase !important;
   letter-spacing: 0.1em !important;
-}
-[data-testid="stMetricValue"] {
-  color: var(--cyan) !important;
+}}
+[data-testid="stMetricValue"] {{
+  color: var(--accent) !important;
   font-weight: 800 !important;
   font-family: 'JetBrains Mono', monospace !important;
-}
+}}
 
 /* ── DataFrames ── */
-[data-testid="stDataFrame"] {
+[data-testid="stDataFrame"] {{
   border: 1px solid var(--border) !important;
   border-radius: 10px !important;
   overflow: hidden !important;
   background: var(--card) !important;
-}
+}}
 
 /* ── Alerts ── */
-[data-testid="stAlert"] {
+[data-testid="stAlert"] {{
   border-radius: 8px !important;
   background: var(--card) !important;
   border: 1px solid var(--border) !important;
-}
+}}
 
 /* ── Chat ── */
-[data-testid="stChatMessage"] {
+[data-testid="stChatMessage"] {{
   background: var(--card) !important;
   border: 1px solid var(--border) !important;
   border-radius: 10px !important;
   margin-bottom: 0.6rem !important;
   backdrop-filter: blur(8px) !important;
-}
+}}
 
 /* ── Inputs / Selects ── */
 .stSelectbox [data-baseweb="select"] > div,
 .stTextInput input,
-.stTextArea textarea {
+.stTextArea textarea {{
   border-radius: 7px !important;
   border-color: var(--border) !important;
   background: var(--bg2) !important;
   color: var(--txt) !important;
-}
-.stSelectbox [data-baseweb="select"] > div {
+  font-size: 0.875rem !important;
+}}
+.stSelectbox [data-baseweb="select"] > div {{
   color: var(--txt) !important;
-}
+}}
 
 /* ── Expander ── */
-.streamlit-expanderHeader {
+.streamlit-expanderHeader {{
   background: var(--card) !important;
   border: 1px solid var(--border) !important;
   border-radius: 8px !important;
   font-weight: 600 !important;
   color: var(--txt2) !important;
-  font-size: 0.86rem !important;
-}
-.streamlit-expanderContent {
-  background: rgba(6,13,26,0.6) !important;
+  font-size: 0.875rem !important;
+}}
+.streamlit-expanderContent {{
+  background: {expander_content_bg} !important;
   border: 1px solid var(--border) !important;
   border-top: none !important;
-}
+}}
 
 /* ── Divider ── */
-hr {
+hr {{
   border-color: var(--border) !important;
   margin: 1.25rem 0 !important;
-}
+}}
 
 /* ── Status widget ── */
-[data-testid="stStatusWidget"] {
+[data-testid="stStatusWidget"] {{
   border-radius: 8px !important;
   border: 1px solid var(--border) !important;
   background: var(--card) !important;
-}
+}}
 
 /* ── File uploader ── */
-[data-testid="stFileUploader"] {
+[data-testid="stFileUploader"] {{
   border: 2px dashed var(--border2) !important;
   border-radius: 10px !important;
-  background: rgba(0,212,255,0.02) !important;
-}
+  background: var(--accent-dim) !important;
+}}
 
 /* ── Radio ── */
-[data-testid="stRadio"] > div {
+[data-testid="stRadio"] > div {{
   background: transparent !important;
-}
+}}
 
 /* ── Checkbox ── */
-.stCheckbox label p { color: var(--txt2) !important; }
+.stCheckbox label p {{ color: var(--txt2) !important; font-size: 0.875rem !important; }}
 
 /* ── Info/warning/success/error native boxes ── */
-.stInfo    { background: rgba(0,212,255,0.06) !important; border-color: rgba(0,212,255,0.25) !important; }
-.stWarning { background: rgba(245,158,11,0.06) !important; border-color: rgba(245,158,11,0.25) !important; }
-.stSuccess { background: rgba(16,185,129,0.06) !important; border-color: rgba(16,185,129,0.25) !important; }
-.stError   { background: rgba(239,68,68,0.06) !important; border-color: rgba(239,68,68,0.25) !important; }
+.stInfo    {{ background: var(--accent-dim) !important; border-color: var(--border2) !important; }}
+.stWarning {{ background: rgba(245,158,11,0.06) !important; border-color: rgba(245,158,11,0.25) !important; }}
+.stSuccess {{ background: rgba(16,185,129,0.06) !important; border-color: rgba(16,185,129,0.25) !important; }}
+.stError   {{ background: rgba(239,68,68,0.06) !important; border-color: rgba(239,68,68,0.25) !important; }}
 
 /* ── Caption ── */
-.stCaption p { color: #64748B !important; font-size: 0.75rem !important; }
+.stCaption p {{ color: var(--txt3) !important; font-size: 0.75rem !important; }}
 
 /* ── Selectbox dropdown text ── */
 .stSelectbox [data-baseweb="select"] span,
 .stSelectbox [data-baseweb="select"] div[class*="placeholder"],
-.stSelectbox [data-baseweb="menu"] li {
-  color: #CBD5E1 !important;
-}
+.stSelectbox [data-baseweb="menu"] li {{
+  color: var(--txt) !important;
+  font-size: 0.875rem !important;
+}}
 
 /* ── Text input typed text ── */
-.stTextInput input, .stTextArea textarea {
-  color: #E2E8F0 !important;
-}
+.stTextInput input, .stTextArea textarea {{
+  color: var(--txt) !important;
+}}
 
 /* ── Expander header text ── */
 .streamlit-expanderHeader p,
-.streamlit-expanderHeader span {
-  color: #94A3B8 !important;
-}
+.streamlit-expanderHeader span {{
+  color: var(--txt2) !important;
+}}
 
 /* ── Code blocks ── */
-.stCodeBlock code, pre {
+.stCodeBlock code, pre {{
   background: rgba(0,0,0,0.4) !important;
   color: #7DD3FC !important;
-}
+}}
 
 /* ── Tab-like step indicators ── */
-.ai-step-row { display: flex; gap: 0; margin-bottom: 2rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-.ai-step { flex: 1; padding: 0.6rem 0.5rem; text-align: center; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; background: var(--bg2); color: var(--txt3); border-right: 1px solid var(--border); transition: all 0.2s; }
-.ai-step:last-child { border-right: none; }
-.ai-step.active { background: var(--cyan-dim); color: var(--cyan); }
-.ai-step.done { background: rgba(16,185,129,0.08); color: #10B981; }
-</style>
-""", unsafe_allow_html=True)
+.ai-step-row {{ display: flex; gap: 0; margin-bottom: 2rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }}
+.ai-step {{ flex: 1; padding: 0.6rem 0.5rem; text-align: center; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; background: var(--bg2); color: var(--txt3); border-right: 1px solid var(--border); transition: all 0.2s; }}
+.ai-step:last-child {{ border-right: none; }}
+.ai-step.active {{ background: var(--accent-dim); color: var(--accent); }}
+.ai-step.done {{ background: rgba(16,185,129,0.08); color: #10B981; }}
+</style>""", unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -455,19 +511,17 @@ hr {
 def _html_page_header(title: str, subtitle: str = "", icon: str = "") -> None:
     icon_html = f'<span style="font-size:1.5rem;margin-right:0.4rem;">{icon}</span>' if icon else ""
     sub_html  = (
-        f'<p style="color:#64748B;font-size:0.86rem;margin:0.3rem 0 0;">{subtitle}</p>'
+        f'<p style="color:var(--txt2);font-size:0.875rem;margin:0.3rem 0 0;">{subtitle}</p>'
         if subtitle else ""
     )
     st.markdown(f"""
 <div style="margin-bottom:1.5rem;">
   <div style="display:flex;align-items:center;">
     {icon_html}
-    <h1 style="margin:0;padding:0;background:linear-gradient(135deg,#E2E8F0,#94A3B8);
-         -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-         background-clip:text;">{title}</h1>
+    <h1 style="margin:0;padding:0;color:var(--txt);">{title}</h1>
   </div>
-  <div style="height:1px;background:linear-gradient(90deg,rgba(0,212,255,0.6) 0%,
-       rgba(124,58,237,0.3) 40%,transparent 100%);margin:0.5rem 0 0.3rem;"></div>
+  <div style="height:1px;background:linear-gradient(90deg,var(--accent) 0%,
+       var(--purple) 40%,transparent 100%);margin:0.5rem 0 0.3rem;opacity:0.6;"></div>
   {sub_html}
 </div>
 """, unsafe_allow_html=True)
@@ -477,9 +531,9 @@ def _html_section_header(title: str, icon: str = "") -> None:
     icon_html = f"{icon}&nbsp;" if icon else ""
     st.markdown(f"""
 <div style="display:flex;align-items:center;gap:0.4rem;margin:1.6rem 0 0.6rem;
-     padding-bottom:0.4rem;border-bottom:1px solid rgba(0,212,255,0.12);">
+     padding-bottom:0.4rem;border-bottom:1px solid var(--border);">
   <span style="font-size:0.95rem;">{icon_html}</span>
-  <span style="color:rgba(0,212,255,0.8);font-size:0.72rem;font-weight:700;
+  <span style="color:var(--accent);font-size:0.72rem;font-weight:700;
         text-transform:uppercase;letter-spacing:0.1em;">{title}</span>
 </div>
 """, unsafe_allow_html=True)
@@ -508,33 +562,44 @@ def _html_client_badge(name: str, has_excel: bool, has_registry: bool) -> None:
     initials = "".join(p[0].upper() for p in name.split()[:2]) if name else "?"
     st.markdown(f"""
 <div style="display:flex;align-items:center;gap:0.85rem;padding:0.85rem 1.1rem;
-     background:rgba(10,22,40,0.7);border:1px solid rgba(0,212,255,0.15);
+     background:var(--card);border:1px solid var(--border);
      border-radius:10px;margin-bottom:1rem;
-     box-shadow:0 0 20px rgba(0,212,255,0.06);backdrop-filter:blur(8px);">
-  <div style="width:44px;height:44px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(124,58,237,0.2));
-       border:1px solid rgba(0,212,255,0.3);border-radius:50%;
+     box-shadow:0 0 20px rgba(0,0,0,0.06);backdrop-filter:blur(8px);">
+  <div style="width:44px;height:44px;background:linear-gradient(135deg,var(--accent-dim),rgba(124,58,237,0.2));
+       border:1px solid var(--border2);border-radius:50%;
        display:flex;align-items:center;justify-content:center;
-       color:#00D4FF;font-size:0.95rem;font-weight:800;flex-shrink:0;
-       box-shadow:0 0 12px rgba(0,212,255,0.2);">{initials}</div>
+       color:var(--accent);font-size:0.95rem;font-weight:800;flex-shrink:0;">{initials}</div>
   <div>
-    <div style="font-weight:700;color:#E2E8F0;font-size:1.05rem;line-height:1.2;">{name}</div>
+    <div style="font-weight:700;color:var(--txt);font-size:1.05rem;line-height:1.2;">{name}</div>
     <div style="display:flex;gap:0.3rem;margin-top:4px;">{" ".join(tags)}</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
 
-def _html_callout(text: str, level: str = "info") -> None:
+def _html_callout(title_or_text: str, body_or_level: str = "info", level: str = "") -> None:
+    """
+    Two call signatures:
+      _html_callout("Title", "Body text", "info")   -- title + body
+      _html_callout("text with <strong>html</strong>", "info")  -- legacy
+    """
     cfg = {
         "info":    ("rgba(0,212,255,0.06)",   "#38BDF8", "rgba(0,212,255,0.3)",   "ℹ"),
         "warning": ("rgba(245,158,11,0.06)",  "#F59E0B", "rgba(245,158,11,0.3)",  "⚠"),
         "alert":   ("rgba(239,68,68,0.06)",   "#EF4444", "rgba(239,68,68,0.3)",   "🚨"),
         "success": ("rgba(16,185,129,0.06)",  "#10B981", "rgba(16,185,129,0.3)",  "✓"),
     }
-    bg, tc, border, icon = cfg.get(level, cfg["info"])
+    if level:
+        # 3-arg form: title, body, level
+        actual_level = level
+        text = f"<strong>{title_or_text}</strong><br><span style='opacity:0.85;font-size:0.85em;'>{body_or_level}</span>"
+    else:
+        actual_level = body_or_level if body_or_level in cfg else "info"
+        text = title_or_text
+    bg, tc, border, icon = cfg.get(actual_level, cfg["info"])
     st.markdown(f"""
 <div style="background:{bg};border-left:3px solid {border};border-radius:0 8px 8px 0;
-     padding:0.6rem 1rem;margin:0.4rem 0;font-size:0.87rem;color:{tc};
+     padding:0.6rem 1rem;margin:0.4rem 0;font-size:0.875rem;color:{tc};
      backdrop-filter:blur(4px);">
   {icon}&nbsp; {text}
 </div>
@@ -542,17 +607,16 @@ def _html_callout(text: str, level: str = "info") -> None:
 
 
 def _html_stat_row(stats: list) -> None:
-    n = len(stats)
     cards = ""
     for label, value in stats:
         cards += f"""
-<div style="flex:1;background:rgba(10,22,40,0.7);border:1px solid rgba(0,212,255,0.12);
+<div style="flex:1;background:var(--card);border:1px solid var(--border);
      border-radius:10px;padding:0.9rem 1.1rem;
-     box-shadow:0 0 16px rgba(0,0,0,0.2),inset 0 1px 0 rgba(255,255,255,0.03);
-     border-left:3px solid rgba(0,212,255,0.5);backdrop-filter:blur(8px);">
-  <div style="color:#475569;font-size:0.62rem;font-weight:700;text-transform:uppercase;
+     box-shadow:0 0 16px rgba(0,0,0,0.08),inset 0 1px 0 rgba(255,255,255,0.03);
+     border-left:3px solid var(--accent);backdrop-filter:blur(8px);">
+  <div style="color:var(--txt3);font-size:0.62rem;font-weight:700;text-transform:uppercase;
        letter-spacing:0.1em;">{label}</div>
-  <div style="color:#00D4FF;font-size:1.25rem;font-weight:800;margin-top:3px;
+  <div style="color:var(--accent);font-size:1.25rem;font-weight:800;margin-top:3px;
        font-family:'JetBrains Mono',monospace;">{value}</div>
 </div>"""
     st.markdown(
@@ -573,7 +637,7 @@ def _html_footer() -> None:
     ⬡ {BRAND.upper()}
   </span>
   <span style="color:#334155;font-size:0.67rem;letter-spacing:0.06em;">
-    {PRODUCT} &nbsp;·&nbsp; © {year} &nbsp;·&nbsp; Powered by Claude
+    ⬡ AI WORKFORCE SOLUTIONS &nbsp;|&nbsp; Wealth Intelligence Platform &nbsp;|&nbsp; © {year}
   </span>
   <span style="color:#1E293B;font-size:0.67rem;">
     {datetime.now().strftime('%B %d, %Y')}
@@ -1007,7 +1071,7 @@ Return ONLY valid JSON, no markdown, no explanation."""
     client_api = anthropic.Anthropic()
     try:
         resp = client_api.messages.create(
-            model="claude-opus-4-6",
+            model="claude-haiku-4-5",
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -1057,7 +1121,7 @@ Return ONLY valid JSON, no markdown."""
     client_api = anthropic.Anthropic()
     try:
         resp = client_api.messages.create(
-            model="claude-opus-4-6",
+            model="claude-haiku-4-5",
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -1067,20 +1131,337 @@ Return ONLY valid JSON, no markdown."""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# API / activity / completeness helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _call_api_with_retry(api_client, max_attempts: int = 3, backoff: float = 2.0, **kwargs):
+    """Call Anthropic API with exponential backoff retry."""
+    import anthropic as _anthropic
+    last_exc = None
+    for attempt in range(max_attempts):
+        try:
+            return api_client.messages.create(**kwargs)
+        except (_anthropic.RateLimitError, _anthropic.APIStatusError, _anthropic.APIConnectionError) as e:
+            last_exc = e
+            if attempt < max_attempts - 1:
+                time.sleep(backoff * (attempt + 1))
+    raise last_exc
+
+
+def _log_activity(action: str, client: str = "", detail: str = "") -> None:
+    """Append to activity log in session state (max 20 entries)."""
+    if "activity_log" not in st.session_state:
+        st.session_state["activity_log"] = []
+    entry = {
+        "ts": datetime.now().strftime("%H:%M"),
+        "action": action,
+        "client": client,
+        "detail": detail,
+    }
+    st.session_state["activity_log"].insert(0, entry)
+    st.session_state["activity_log"] = st.session_state["activity_log"][:20]
+
+
+def _prep_completeness(client_name: str) -> int:
+    """Return 0-100 completeness score for a client."""
+    entry = _registry_entry(client_name)
+    score = 0
+    if entry:
+        intake = entry.get("intake", entry)
+        for field in ["Full Name", "Email", "Phone", "Date of Birth", "SSN", "Address"]:
+            if intake.get(field, "").strip():
+                score += 6  # 6 pts each = 36 pts max
+        if intake.get("Account Type", "").strip():
+            score += 4  # 4 pts = 40 total for registry
+    has_excel = _client_has_excel(client_name)
+    if has_excel:
+        _, _, sheets = _load_client_sheets(client_name)
+        sheet_pts = min(60, len(sheets) * 12)
+        score += sheet_pts
+    return min(100, score)
+
+
+def _create_intake_template() -> bytes:
+    """Return an Excel intake template as bytes."""
+    buf = io.BytesIO()
+    cols = ["Full Name", "Date of Birth", "SSN", "Email", "Phone", "Address",
+            "Account Type", "Employer", "Annual Income", "Investment Objective",
+            "Risk Tolerance", "Co-Account Holder Name", "Co-Account Holder DOB"]
+    df = pd.DataFrame(columns=cols)
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Client Intake")
+    buf.seek(0)
+    return buf.getvalue()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Demo client data and bootstrap
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DEMO_CLIENTS = [
+    {
+        "Full Name": "Robert Thornton",
+        "Date of Birth": "05/12/1958",
+        "SSN": "XXX-XX-4821",
+        "Email": "r.thornton@email.com",
+        "Phone": "203-555-0142",
+        "Address": "14 Fieldstone Drive, Greenwich, CT 06830",
+        "Account Type": "Joint Brokerage",
+        "Employer": "Retired",
+        "Annual Income": "285000",
+        "Investment Objective": "Growth & Income",
+        "Risk Tolerance": "Moderate",
+        "Co-Account Holder Name": "Catherine Thornton",
+        "Co-Account Holder DOB": "03/28/1961",
+        "_aum": 4200000,
+        "_has_excel": True,
+    },
+    {
+        "Full Name": "James Chen",
+        "Date of Birth": "09/03/1972",
+        "SSN": "XXX-XX-7364",
+        "Email": "jchen@techventures.com",
+        "Phone": "415-555-0289",
+        "Address": "2847 Pacific Heights Blvd, San Francisco, CA 94115",
+        "Account Type": "Individual",
+        "Employer": "Chen Capital LLC",
+        "Annual Income": "620000",
+        "Investment Objective": "Aggressive Growth",
+        "Risk Tolerance": "Aggressive",
+        "_aum": 1800000,
+        "_has_excel": True,
+    },
+    {
+        "Full Name": "Margaret Hayes",
+        "Date of Birth": "11/19/1945",
+        "SSN": "XXX-XX-2193",
+        "Email": "mhayes@naples.net",
+        "Phone": "239-555-0317",
+        "Address": "501 Gulf Shore Blvd N, Naples, FL 34102",
+        "Account Type": "Trust",
+        "Employer": "Retired",
+        "Annual Income": "190000",
+        "Investment Objective": "Income & Preservation",
+        "Risk Tolerance": "Conservative",
+        "Trust Name": "Hayes Family Revocable Trust",
+        "Trust Date": "06/15/2001",
+        "_aum": 6100000,
+        "_has_excel": True,
+    },
+    {
+        "Full Name": "Sarah Rodriguez",
+        "Date of Birth": "07/22/1985",
+        "SSN": "XXX-XX-5537",
+        "Email": "srodriguez@rodriguez-arch.com",
+        "Phone": "512-555-0461",
+        "Address": "3920 Westlake Dr, Austin, TX 78746",
+        "Account Type": "Individual",
+        "Employer": "Rodriguez Architecture Group",
+        "Annual Income": "310000",
+        "Investment Objective": "Growth",
+        "Risk Tolerance": "Moderate-Aggressive",
+        "_aum": 890000,
+        "_has_excel": True,
+    },
+    {
+        "Full Name": "David Nakamura",
+        "Date of Birth": "02/14/1965",
+        "SSN": "XXX-XX-8902",
+        "Email": "d.nakamura@sunvalleydev.com",
+        "Phone": "480-555-0583",
+        "Address": "7821 E Pinnacle Peak Rd, Scottsdale, AZ 85255",
+        "Account Type": "Joint Brokerage",
+        "Employer": "Sun Valley Development",
+        "Annual Income": "480000",
+        "Investment Objective": "Growth & Income",
+        "Risk Tolerance": "Moderate",
+        "Co-Account Holder Name": "Lisa Nakamura",
+        "Co-Account Holder DOB": "08/30/1967",
+        "_aum": 2400000,
+        "_has_excel": True,
+    },
+    {
+        "Full Name": "Patricia O'Brien",
+        "Date of Birth": "04/07/1952",
+        "SSN": "XXX-XX-3341",
+        "Email": "pobrien@lakeforest.com",
+        "Phone": "847-555-0724",
+        "Address": "892 N Western Ave, Lake Forest, IL 60045",
+        "Account Type": "Individual",
+        "Employer": "Retired",
+        "Annual Income": "165000",
+        "Investment Objective": "Income & Preservation",
+        "Risk Tolerance": "Conservative",
+        "_aum": 3700000,
+        "_has_excel": True,
+    },
+    {
+        "Full Name": "Michael Foster",
+        "Date of Birth": "08/11/1978",
+        "SSN": "XXX-XX-6618",
+        "Email": "mfoster@fostercapital.com",
+        "Phone": "704-555-0845",
+        "Address": "4455 Sharon Rd, Charlotte, NC 28211",
+        "Account Type": "Joint Brokerage",
+        "Employer": "Foster Capital Partners",
+        "Annual Income": "395000",
+        "Investment Objective": "Growth",
+        "Risk Tolerance": "Moderate-Aggressive",
+        "Co-Account Holder Name": "Rebecca Foster",
+        "Co-Account Holder DOB": "12/03/1980",
+        "_aum": 1200000,
+        "_has_excel": True,
+    },
+    {
+        "Full Name": "Dr. Anthony Williams",
+        "Date of Birth": "06/25/1968",
+        "SSN": "XXX-XX-9901",
+        "Email": "awilliams@dallasoralmed.com",
+        "Phone": "214-555-0967",
+        "Address": "1820 Preston Rd Ste 400, Dallas, TX 75252",
+        "Account Type": "Individual",
+        "Employer": "Dallas Oral & Maxillofacial Surgery",
+        "Annual Income": "540000",
+        "Investment Objective": "Growth",
+        "Risk Tolerance": "Moderate",
+        "_aum": 5300000,
+        "_has_excel": False,  # pipeline only
+    },
+]
+
+
+def _create_demo_excel(name: str, client_data: dict) -> None:
+    """Create a realistic demo Excel workbook for a client."""
+    aum = client_data.get("_aum", 1000000)
+    fn = _name_to_filename(name)
+    path = CLIENTS_DIR / fn
+    if path.exists():
+        return
+
+    acct_num = f"FID-{abs(hash(name)) % 900000 + 100000}"
+
+    # Sheet 1: Account Summary
+    summary = pd.DataFrame([{
+        "Account Number": acct_num,
+        "Account Type": client_data.get("Account Type", "Individual"),
+        "Account Owner": name,
+        "Total Value": aum,
+        "Cash & Equivalents": round(aum * 0.05, 2),
+        "Equity Value": round(aum * 0.62, 2),
+        "Fixed Income Value": round(aum * 0.28, 2),
+        "Alternatives": round(aum * 0.05, 2),
+        "YTD Return %": round((hash(name) % 140 - 20) / 10, 1),
+        "Inception Date": "2018-03-15",
+        "Custodian": "Fidelity Investments",
+        "Advisor": "Smith Wealth Management",
+    }])
+
+    # Sheet 2: Distributions & Contributions
+    dc_rows = []
+    for i, month in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]):
+        dc_rows.append({
+            "Month": month, "Year": 2024,
+            "Contributions": round((hash(name + month) % 20000), 0),
+            "Withdrawals": round((hash(name + month + "w") % 8000), 0),
+            "Dividends": round(aum * 0.004 / 12, 2),
+            "Interest": round(aum * 0.002 / 12, 2),
+        })
+    dc = pd.DataFrame(dc_rows)
+
+    # Sheet 3: Tax & Realized G/L
+    tax_rows = [
+        {"Security": "AAPL", "Shares": 120, "Cost Basis": 15200, "Proceeds": 22800,
+         "Realized GL": 7600, "Term": "Long"},
+        {"Security": "MSFT", "Shares": 85, "Cost Basis": 24800, "Proceeds": 31500,
+         "Realized GL": 6700, "Term": "Long"},
+        {"Security": "BND", "Shares": 200, "Cost Basis": 16400, "Proceeds": 15900,
+         "Realized GL": -500, "Term": "Short"},
+        {"Security": "VTI", "Shares": 60, "Cost Basis": 13200, "Proceeds": 16800,
+         "Realized GL": 3600, "Term": "Long"},
+    ]
+    tax = pd.DataFrame(tax_rows)
+
+    # Sheet 4: Beneficiaries
+    bene_rows = [
+        {"Beneficiary Name": "Spouse", "Relationship": "Spouse",
+         "Allocation %": 100, "SSN": "XXX-XX-0000", "DOB": "01/01/1970"},
+    ]
+    bene = pd.DataFrame(bene_rows)
+
+    # Sheet 5: Allocation
+    alloc_rows = [
+        {"Asset Class": "US Large Cap Equity", "Ticker": "VTI", "Value": round(aum*0.30, 2), "Weight %": 30},
+        {"Asset Class": "International Equity", "Ticker": "VXUS", "Value": round(aum*0.15, 2), "Weight %": 15},
+        {"Asset Class": "US Small/Mid Cap", "Ticker": "VXF", "Value": round(aum*0.10, 2), "Weight %": 10},
+        {"Asset Class": "Technology Sector", "Ticker": "VGT", "Value": round(aum*0.07, 2), "Weight %": 7},
+        {"Asset Class": "US Bonds", "Ticker": "BND", "Value": round(aum*0.18, 2), "Weight %": 18},
+        {"Asset Class": "TIPS / Inflation", "Ticker": "VTIP", "Value": round(aum*0.05, 2), "Weight %": 5},
+        {"Asset Class": "International Bonds", "Ticker": "BNDX", "Value": round(aum*0.05, 2), "Weight %": 5},
+        {"Asset Class": "Real Assets / Alts", "Ticker": "VNQ", "Value": round(aum*0.05, 2), "Weight %": 5},
+        {"Asset Class": "Cash & Equivalents", "Ticker": "VMFXX", "Value": round(aum*0.05, 2), "Weight %": 5},
+    ]
+    alloc = pd.DataFrame(alloc_rows)
+
+    with pd.ExcelWriter(path, engine="openpyxl") as writer:
+        summary.to_excel(writer, index=False, sheet_name="Account Summary")
+        dc.to_excel(writer, index=False, sheet_name="Distributions & Contributions")
+        tax.to_excel(writer, index=False, sheet_name="Tax & Realized GL")
+        bene.to_excel(writer, index=False, sheet_name="Beneficiaries")
+        alloc.to_excel(writer, index=False, sheet_name="Allocation")
+
+
+def _save_to_registry_flat(fields: dict) -> None:
+    """Save a flat fields dict (with 'Full Name' key) directly to registry."""
+    DATA_DIR.mkdir(exist_ok=True)
+    name = fields.get("Full Name", "").strip()
+    if not name:
+        return
+    records = _load_registry()
+    entry = {
+        "name":          name,
+        "sf_id":         "",
+        "registered_at": datetime.utcnow().isoformat() + "Z",
+        "intake":        {k: v for k, v in fields.items() if not k.startswith("_")},
+        "sf_record":     {},
+    }
+    updated = [r for r in records if r.get("name", "").lower() != name.lower()]
+    updated.append(entry)
+    REGISTRY_PATH.write_text(json.dumps(updated, indent=2))
+
+
+def _bootstrap_demo_clients() -> None:
+    """Create demo clients if no clients exist yet."""
+    CLIENTS_DIR.mkdir(parents=True, exist_ok=True)
+    known = _all_known_clients()
+    if known:
+        return
+    for cd in _DEMO_CLIENTS:
+        name = cd["Full Name"]
+        fields = {k: v for k, v in cd.items() if not k.startswith("_")}
+        _save_to_registry_flat(fields)
+        if cd.get("_has_excel", False):
+            _create_demo_excel(name, cd)
+    _log_activity("Demo data loaded", "", "8 clients initialized")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Sidebar
 # ─────────────────────────────────────────────────────────────────────────────
 
 with st.sidebar:
+    # ── Logo ─────────────────────────────────────────────────────────────────
     st.markdown(f"""
 <div style="padding:0.5rem 0 1.1rem;text-align:center;
      border-bottom:1px solid rgba(0,212,255,0.1);margin-bottom:1rem;">
   <div style="color:#00D4FF;font-size:1rem;font-weight:800;letter-spacing:0.04em;
        text-shadow:0 0 12px rgba(0,212,255,0.5);">⬡ {BRAND}</div>
-  <div style="color:#1E3A5F;font-size:0.58rem;letter-spacing:0.14em;
+  <div style="color:#334155;font-size:0.58rem;letter-spacing:0.14em;
        margin-top:3px;text-transform:uppercase;">{PRODUCT}</div>
 </div>
 """, unsafe_allow_html=True)
 
+    # ── API status dot ───────────────────────────────────────────────────────
     if HAS_API_KEY:
         st.markdown(
             '<div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);'
@@ -1095,33 +1476,54 @@ with st.sidebar:
             'text-align:center;margin-bottom:0.5rem;">🟡 Mock Mode — no API key</div>',
             unsafe_allow_html=True,
         )
+
+    # ── Theme toggle ─────────────────────────────────────────────────────────
+    theme = st.radio(
+        "🎨 Theme",
+        ["light", "dark"],
+        index=0 if st.session_state.get("theme", "light") == "light" else 1,
+        horizontal=True,
+        key="theme_radio",
+    )
+    st.session_state["theme"] = theme
+
     st.divider()
 
-    # ── Section: Advisor Tools ────────────────────────────────────────────────
+    # ── Nav jump override ────────────────────────────────────────────────────
+    _jump = st.session_state.pop("_jump_page", None)
+    pages = ["Dashboard", "New Client", "Client Profiles", "AI Advisor", "Operations"]
+    _nav_idx = pages.index(_jump) if _jump and _jump in pages else 0
+
+    # ── Navigation ───────────────────────────────────────────────────────────
     st.markdown(
         '<div style="color:#00D4FF;font-size:0.57rem;font-weight:700;'
         'text-transform:uppercase;letter-spacing:0.14em;margin-bottom:0.35rem;">'
         '— Advisor Tools</div>',
         unsafe_allow_html=True,
     )
+    _page_labels = [
+        "📊 Dashboard",
+        "📥 New Client",
+        "👥 Client Profiles",
+        "🤖 AI Advisor",
+        "📋 Operations",
+    ]
     page = st.radio(
         "nav",
-        [
-            "📊 Dashboard",
-            "📥 New Client",
-            "👥 Client Profiles",
-            "🤖 AI Advisor",
-            "📋 Operations",
-        ],
+        _page_labels,
+        index=_nav_idx,
         label_visibility="collapsed",
     )
     st.divider()
 
+    # ── Bootstrap demo clients ───────────────────────────────────────────────
+    _bootstrap_demo_clients()
+
+    # ── Client Roster ─────────────────────────────────────────────────────────
     all_clients = _all_known_clients()
     n_clients   = len(all_clients)
     n_pipeline  = len([c for c in all_clients if not _client_has_excel(c)])
 
-    # Quick stats bar
     st.markdown(
         f'<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">'
         f'<div style="flex:1;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.15);'
@@ -1138,131 +1540,61 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    # Client list
     if all_clients:
         st.markdown(
             '<div style="color:#334155;font-size:0.57rem;font-weight:700;'
             'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.3rem;">'
-            'Active Clients</div>',
+            '👥 CLIENT ROSTER</div>',
             unsafe_allow_html=True,
         )
         for cn in all_clients:
-            has_xl  = _client_has_excel(cn)
-            status  = "🟢" if has_xl else "🟡"
-            st.markdown(
-                f'<div style="font-size:0.77rem;color:#94A3B8;padding:2px 0;'
-                f'border-bottom:1px solid rgba(255,255,255,0.03);">'
-                f'{status} {cn}</div>',
-                unsafe_allow_html=True,
-            )
-        st.markdown("<br>", unsafe_allow_html=True)
+            has_xl = _client_has_excel(cn)
+            status = "🟢" if has_xl else "🟡"
+            if st.button(
+                f"{status} {cn}",
+                key=f"sb_client_{cn}",
+                use_container_width=True,
+            ):
+                st.session_state["_jump_page"]    = "Client Profiles"
+                st.session_state["mp_sel_client"] = cn
+                st.rerun()
 
-    if st.button("⚙  Generate Sample Data", use_container_width=True):
-        with st.spinner("Creating sample files…"):
-            create_dummy_data()
-        st.success("Sample data created.")
-        st.rerun()
-
-    # ── Persistent AI Assistant ───────────────────────────────────────────────
     st.divider()
-    st.markdown(
-        '<div style="color:#00D4FF;font-size:0.62rem;font-weight:700;'
-        'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.5rem;">'
-        '🤖 AI Assistant</div>',
-        unsafe_allow_html=True,
+
+    # ── Download Intake Template ──────────────────────────────────────────────
+    st.download_button(
+        label="⬇ Download Intake Template",
+        data=_create_intake_template(),
+        file_name="client_intake_template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
     )
 
-    # Determine context: use whichever client is currently active
-    _sb_ctx_client = (
-        st.session_state.get("aac_client")
-        or st.session_state.get("mp_client")
-        or st.session_state.get("ob_client_sel")
-    )
-    if _sb_ctx_client and _all_known_clients():
-        st.markdown(
-            f'<div style="font-size:0.7rem;color:#64748B;margin-bottom:0.4rem;">'
-            f'Context: <span style="color:#CBD5E1;">{_sb_ctx_client}</span></div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            '<div style="font-size:0.7rem;color:#64748B;margin-bottom:0.4rem;">'
-            'General mode — no client selected</div>',
-            unsafe_allow_html=True,
-        )
 
-    st.session_state.setdefault("sb_history", [])
+# ─────────────────────────────────────────────────────────────────────────────
+# CSS injection + Login gate
+# ─────────────────────────────────────────────────────────────────────────────
 
-    # Show last exchange inline
-    if st.session_state["sb_history"]:
-        last = st.session_state["sb_history"][-1]
-        st.markdown(
-            f'<div style="background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.1);'
-            f'border-radius:7px;padding:0.5rem 0.65rem;margin-bottom:0.4rem;'
-            f'font-size:0.75rem;color:#94A3B8;max-height:160px;overflow-y:auto;">'
-            f'<span style="color:#64748B;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;">YOU:</span><br>'
-            f'<span style="color:#94A3B8;">{last["q"]}</span><br><br>'
-            f'<span style="color:#64748B;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;">MARCUS:</span><br>'
-            f'<span style="color:#CBD5E1;">{last["a"][:400]}{"…" if len(last["a"])>400 else ""}</span>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+_inject_css(st.session_state.get("theme", "light"))
 
-    # Input form (forms work in sidebar; avoids page re-run on every keystroke)
-    with st.form(key="sb_ai_form", clear_on_submit=True):
-        sb_q = st.text_input(
-            "Ask anything…",
-            placeholder="e.g. What forms do I need for a joint account?",
-            label_visibility="collapsed",
-        )
-        col_send, col_clr = st.columns([3, 1])
-        with col_send:
-            sb_submitted = st.form_submit_button("Ask →", use_container_width=True)
-        with col_clr:
-            sb_clear = st.form_submit_button("✕", use_container_width=True)
-
-    if sb_clear:
-        st.session_state["sb_history"] = []
-        st.rerun()
-
-    if sb_submitted and sb_q.strip():
-        q = sb_q.strip()
-        if HAS_API_KEY:
-            # Build context: client data if available, otherwise general
-            if _sb_ctx_client:
-                _sb_context = _build_client_context(_sb_ctx_client)
-                _sb_system  = _build_advisor_system_prompt(_sb_ctx_client, _sb_context)
-            else:
-                _sb_system = (
-                    f"You are Marcus Reid, a senior wealth management advisor at {BRAND}. "
-                    "Answer questions about wealth management processes, onboarding, compliance, "
-                    "forms, and general advisory best practices. Be direct and concise."
-                )
-            # Build message history for context
-            _sb_msgs = []
-            for _h in st.session_state["sb_history"][-6:]:
-                _sb_msgs.append({"role": "user",      "content": _h["q"]})
-                _sb_msgs.append({"role": "assistant",  "content": _h["a"]})
-            _sb_msgs.append({"role": "user", "content": q})
-            try:
-                _sb_resp = anthropic.Anthropic().messages.create(
-                    model="claude-opus-4-6",
-                    max_tokens=1024,
-                    system=_sb_system,
-                    messages=_sb_msgs,
-                )
-                answer = _sb_resp.content[0].text
-            except Exception as exc:
-                answer = f"⚠ Error: {exc}"
+if not st.session_state.get("authenticated"):
+    st.markdown("""<div style='max-width:420px;margin:80px auto;padding:2.5rem;
+    background:var(--card);border:1px solid var(--border);border-radius:16px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.15);'>
+    <h2 style='color:var(--txt);margin-bottom:0.25rem;'>⬡ Wealth Intelligence Platform</h2>
+    <p style='color:var(--txt2);font-size:0.875rem;margin-bottom:1.5rem;'>
+    Demo credentials pre-filled — click Sign In</p></div>""", unsafe_allow_html=True)
+    with st.form("login_form"):
+        email = st.text_input("Email", value=_DEMO_EMAIL)
+        pwd   = st.text_input("Password", type="password", value=_DEMO_PASS)
+        sub   = st.form_submit_button("Sign In", type="primary", use_container_width=True)
+    if sub:
+        if email.strip() == _DEMO_EMAIL and pwd == _DEMO_PASS:
+            st.session_state["authenticated"] = True
+            st.rerun()
         else:
-            answer = (
-                "*(Mock mode — add ANTHROPIC_API_KEY for live responses)*\n\n"
-                "I'm Marcus Reid, your AI wealth advisor. I can help with client analysis, "
-                "onboarding processes, form selection, meeting prep, and more."
-            )
-        st.session_state["sb_history"].append({"q": q, "a": answer})
-        st.rerun()
-
+            st.error("Invalid credentials. Use demo@advisor.com / demo2026")
+    st.stop()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Page — Dashboard
@@ -1275,26 +1607,37 @@ if page == "📊 Dashboard":
         "📊",
     )
 
+    # ── Value proposition banner ──────────────────────────────────────────────
+    _html_callout(
+        "🏦 Enterprise Wealth Management Platform",
+        "Unified client intelligence, AI-driven insights, and automated compliance documentation — purpose-built for institutional advisors.",
+        "info",
+    )
+
     all_c     = _all_known_clients()
     has_data  = [c for c in all_c if _client_has_excel(c)]
     pipeline  = [c for c in all_c if not _client_has_excel(c)]
 
+    # ── AUM metrics from demo clients ─────────────────────────────────────────
+    _total_aum = sum(cd.get("_aum", 0) for cd in _DEMO_CLIENTS if cd.get("_has_excel", False))
+    _avg_aum   = _total_aum // max(1, len(has_data))
+
     # ── KPI cards ────────────────────────────────────────────────────────────
     kc1, kc2, kc3, kc4 = st.columns(4)
     for col, label, val, color, sub in [
-        (kc1, "Total Clients",      str(len(all_c)),      "#00D4FF", "in registry"),
-        (kc2, "Full Profiles",      str(len(has_data)),   "#10B981", "with Excel data"),
-        (kc3, "Pipeline / Pending", str(len(pipeline)),   "#A78BFA", "profile only"),
-        (kc4, "Forms Available",    "4",                  "#F59E0B", "PDF templates loaded"),
+        (kc1, "Total Clients",      str(len(all_c)),             "#00D4FF", "in registry"),
+        (kc2, "Assets Under Mgmt",  _fmt_money(_total_aum),      "#10B981", "platform total"),
+        (kc3, "Pipeline / Pending", str(len(pipeline)),          "#A78BFA", "profile only"),
+        (kc4, "Avg. AUM / Client",  _fmt_money(_avg_aum),        "#F59E0B", "full profiles"),
     ]:
         with col:
             st.markdown(
-                f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
+                f'<div style="background:var(--card);border:1px solid var(--border);'
                 f'border-top:2px solid {color};border-radius:10px;padding:1.1rem 1rem 0.9rem;">'
                 f'<div style="color:{color};font-size:2rem;font-weight:800;'
                 f'font-family:\'JetBrains Mono\',monospace;line-height:1;">{val}</div>'
-                f'<div style="color:#E2E8F0;font-size:0.78rem;font-weight:600;margin-top:0.3rem;">{label}</div>'
-                f'<div style="color:#475569;font-size:0.68rem;margin-top:0.1rem;">{sub}</div>'
+                f'<div style="color:var(--txt);font-size:0.78rem;font-weight:600;margin-top:0.3rem;">{label}</div>'
+                f'<div style="color:var(--txt3);font-size:0.68rem;margin-top:0.1rem;">{sub}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -1308,46 +1651,106 @@ if page == "📊 Dashboard":
     def _qa_card(col, icon, title, desc, page_target, btn_label):
         with col:
             st.markdown(
-                f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
+                f'<div style="background:var(--card);border:1px solid var(--border);'
                 f'border-radius:10px;padding:1rem;min-height:110px;">'
                 f'<div style="font-size:1.4rem;margin-bottom:0.35rem;">{icon}</div>'
-                f'<div style="color:#E2E8F0;font-size:0.82rem;font-weight:600;">{title}</div>'
-                f'<div style="color:#475569;font-size:0.72rem;margin-top:0.2rem;">{desc}</div>'
+                f'<div style="color:var(--txt);font-size:0.82rem;font-weight:600;">{title}</div>'
+                f'<div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">{desc}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
             if st.button(btn_label, key=f"qa_{page_target}", use_container_width=True):
-                st.session_state["_nav_override"] = page_target
+                st.session_state["_jump_page"] = page_target
                 st.rerun()
 
-    _qa_card(qa1, "➕", "New Client",    "Upload intake & register", "📥 New Client",      "Start Intake →")
-    _qa_card(qa2, "👥", "Client Profiles", "View briefings & data",  "👥 Client Profiles", "Open Profiles →")
-    _qa_card(qa3, "🤖", "Ask AI Advisor", "Chat with Marcus Reid",   "🤖 AI Advisor",      "Open AI Chat →")
-    _qa_card(qa4, "📄", "Process Forms",  "Fill & download PDFs",    "📋 Operations",      "Go to Ops →")
-
-    # Honor nav override from quick actions
-    if "_nav_override" in st.session_state:
-        _override = st.session_state.pop("_nav_override")
-        st.session_state["_jump_page"] = _override
+    _qa_card(qa1, "➕", "New Client",    "Upload intake & register", "New Client",      "Start Intake →")
+    _qa_card(qa2, "👥", "Client Profiles", "View briefings & data",  "Client Profiles", "Open Profiles →")
+    _qa_card(qa3, "🤖", "Ask AI Advisor", "Chat with Marcus Reid",   "AI Advisor",      "Open AI Chat →")
+    _qa_card(qa4, "📄", "Process Forms",  "Fill & download PDFs",    "Operations",      "Go to Ops →")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Recent Clients ─────────────────────────────────────────────────────────
+    # ── Recent Activity Feed ──────────────────────────────────────────────────
+    _activity = st.session_state.get("activity_log", [])
+    if _activity:
+        _html_section_header("Recent Activity", "🕐")
+        for _ev in _activity[:5]:
+            _cl_html = (f'<span style="color:var(--txt2);">— {_ev["client"]}</span>'
+                        if _ev["client"] else "")
+            _dt_html = (f'<span style="color:var(--txt3);font-size:0.75rem;">· {_ev["detail"]}</span>'
+                        if _ev["detail"] else "")
+            st.markdown(
+                f'<div style="display:flex;gap:0.75rem;align-items:center;padding:0.3rem 0;'
+                f'border-bottom:1px solid var(--border);font-size:0.82rem;">'
+                f'<span style="color:var(--txt3);min-width:3.5rem;">{_ev["ts"]}</span>'
+                f'<span style="color:var(--accent);font-weight:600;">{_ev["action"]}</span>'
+                f'{_cl_html}{_dt_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Client Roster HTML table ──────────────────────────────────────────────
     if all_c:
         _html_section_header("Client Roster", "👥")
-        rows = []
+        _roster_rows = ""
         for cn in all_c:
             has_xl  = _client_has_excel(cn)
             reg     = _registry_entry(cn)
             acct    = reg.get("intake", {}).get("Account Type", "—") if reg else "—"
-            status  = "🟢 Full Profile" if has_xl else "🟡 Intake Only"
-            rows.append({"Client": cn, "Account Type": acct, "Status": status})
-        df_dash = pd.DataFrame(rows)
-        st.dataframe(df_dash, use_container_width=True, hide_index=True)
+            score   = _prep_completeness(cn)
+            score_color = "#10B981" if score >= 80 else "#F59E0B" if score >= 50 else "#EF4444"
+            status_badge = (
+                f'<span style="background:rgba(16,185,129,0.1);color:#10B981;border:1px solid rgba(16,185,129,0.3);'
+                f'border-radius:4px;padding:1px 7px;font-size:0.67rem;font-weight:700;">Full Profile</span>'
+                if has_xl else
+                f'<span style="background:rgba(245,158,11,0.1);color:#F59E0B;border:1px solid rgba(245,158,11,0.3);'
+                f'border-radius:4px;padding:1px 7px;font-size:0.67rem;font-weight:700;">Intake Only</span>'
+            )
+            _roster_rows += f"""
+<tr style="border-bottom:1px solid var(--border);">
+  <td style="padding:0.55rem 0.75rem;color:var(--txt);font-weight:600;">{cn}</td>
+  <td style="padding:0.55rem 0.75rem;color:var(--txt2);">{acct}</td>
+  <td style="padding:0.55rem 0.75rem;">{status_badge}</td>
+  <td style="padding:0.55rem 0.75rem;">
+    <div style="display:flex;align-items:center;gap:0.5rem;">
+      <div style="flex:1;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;">
+        <div style="width:{score}%;background:{score_color};height:100%;border-radius:4px;"></div>
+      </div>
+      <span style="color:{score_color};font-size:0.72rem;font-weight:700;min-width:2.5rem;">{score}%</span>
+    </div>
+  </td>
+</tr>"""
+        st.markdown(f"""
+<table style="width:100%;border-collapse:collapse;background:var(--card);
+              border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+  <thead>
+    <tr style="background:var(--bg2);">
+      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
+                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Client</th>
+      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
+                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Account Type</th>
+      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
+                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Status</th>
+      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
+                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Completeness</th>
+    </tr>
+  </thead>
+  <tbody>{_roster_rows}</tbody>
+</table>""", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        # View profile buttons
+        _btn_cols = st.columns(min(4, len(all_c)))
+        for _bi, _cn in enumerate(all_c[:4]):
+            with _btn_cols[_bi]:
+                if st.button(f"View {_cn.split()[0]} →", key=f"dash_view_{_cn}", use_container_width=True):
+                    st.session_state["_jump_page"]    = "Client Profiles"
+                    st.session_state["mp_sel_client"] = _cn
+                    st.rerun()
     else:
         _html_callout(
-            "No clients in the registry yet. "
-            "<strong>Generate sample data</strong> from the sidebar or go to <strong>Operations</strong> to add a real client.",
+            "No clients in the registry yet.",
+            "Demo clients will be loaded automatically on next refresh.",
             "info",
         )
 
@@ -1365,6 +1768,19 @@ elif page == "📥 New Client":
         "The client is instantly available across all platform features.",
         "📥",
     )
+
+    # ── Template download at top ──────────────────────────────────────────────
+    _tc1, _tc2, _tc3 = st.columns([2, 1, 1])
+    with _tc1:
+        st.caption("Download the intake template, fill it out, then upload below to register a new client.")
+    with _tc3:
+        st.download_button(
+            label="⬇ Download Intake Template",
+            data=_create_intake_template(),
+            file_name="client_intake_template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
     col_l, col_r = st.columns([1, 2])
     with col_l:
@@ -1472,6 +1888,24 @@ elif page == "📥 New Client":
         st.success(f"✅  **{name}** registered — Salesforce ID: `{sf_id}`")
         st.markdown("")
 
+        # Data quality score
+        _dq_score = _prep_completeness(name)
+        _dq_color = "#10B981" if _dq_score >= 80 else "#F59E0B" if _dq_score >= 50 else "#EF4444"
+        st.markdown(
+            f'<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;'
+            f'padding:0.85rem 1.1rem;margin-bottom:0.75rem;">'
+            f'<div style="color:var(--txt3);font-size:0.62rem;font-weight:700;text-transform:uppercase;'
+            f'letter-spacing:0.1em;margin-bottom:0.5rem;">Data Quality Score</div>'
+            f'<div style="display:flex;align-items:center;gap:0.75rem;">'
+            f'<div style="flex:1;background:var(--bg3);border-radius:6px;height:10px;overflow:hidden;">'
+            f'<div style="width:{_dq_score}%;background:{_dq_color};height:100%;border-radius:6px;'
+            f'transition:width 0.5s ease;"></div></div>'
+            f'<span style="color:{_dq_color};font-weight:800;font-size:1.1rem;min-width:3rem;">{_dq_score}%</span>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+        _log_activity("Client registered", name, f"Salesforce ID: {sf_id}")
+
         _html_stat_row([
             ("Annual Income",  _fmt_money(intake.get("Annual Income",  0))),
             ("Net Worth",      _fmt_money(intake.get("Est. Net Worth", 0))),
@@ -1532,6 +1966,29 @@ elif page == "📥 New Client":
         with st.expander("📦 Raw Salesforce Record"):
             st.json(sf_rec)
 
+        # Next Steps section
+        st.divider()
+        _html_section_header("Next Steps", "🚀")
+        ns1, ns2, ns3 = st.columns(3)
+        with ns1:
+            if st.button("👥 View Client Profile", use_container_width=True, type="primary"):
+                st.session_state["_jump_page"]    = "Client Profiles"
+                st.session_state["mp_sel_client"] = name
+                st.rerun()
+        with ns2:
+            if st.button("🤖 Ask AI Advisor", use_container_width=True):
+                st.session_state["_jump_page"] = "AI Advisor"
+                st.session_state["aac_client"] = name
+                st.rerun()
+        with ns3:
+            st.download_button(
+                label="⬇ Intake Template",
+                data=_create_intake_template(),
+                file_name="client_intake_template.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
     _html_footer()
 
 
@@ -1550,12 +2007,19 @@ elif page == "👥 Client Profiles":
     all_clients = _all_known_clients()
     no_data     = _registered_without_data()
 
+    # Handle jump from sidebar or dashboard
+    _mp_jump = st.session_state.pop("mp_sel_client", None)
+
     col_a, col_b = st.columns([2, 1])
     with col_a:
         if all_clients:
             options      = all_clients + ["— Enter name manually —"]
-            saved_client = st.session_state.get("mp_client", "")
-            default_idx  = all_clients.index(saved_client) if saved_client in all_clients else 0
+            # Determine default: jump takes priority, then saved
+            if _mp_jump and _mp_jump in all_clients:
+                default_idx = all_clients.index(_mp_jump)
+            else:
+                saved_client = st.session_state.get("mp_client", "")
+                default_idx  = all_clients.index(saved_client) if saved_client in all_clients else 0
             chosen = st.selectbox("Select client", options, index=default_idx)
             client_name = st.text_input("Client name", placeholder="e.g. Robert Thornton") \
                 if chosen == "— Enter name manually —" else chosen
@@ -1568,14 +2032,6 @@ elif page == "👥 Client Profiles":
 
     with col_b:
         excel_clients = _available_excel_clients()
-        if excel_clients:
-            st.markdown("**Full data available:**")
-            for c in excel_clients:
-                st.markdown(f"• {c}")
-        if no_data:
-            st.markdown("**Profile only:**")
-            for c in no_data:
-                st.markdown(f"• {c}")
         if not all_clients:
             st.caption("No clients yet. Register one or generate sample data.")
 
@@ -1596,43 +2052,25 @@ elif page == "👥 Client Profiles":
                     st.success(f"✅ Saved — {upload_target} now has full account data.")
                     st.rerun()
 
-    st.markdown("")
-    can_run = bool(client_name.strip())
-    if st.button("▶  Generate Brief", type="primary", disabled=not can_run):
+    # ── Auto-load brief when client changes ──────────────────────────────────
+    if client_name.strip() and client_name.strip() != st.session_state.get("mp_client", ""):
         st.session_state["mp_client"] = client_name.strip()
         st.session_state.pop("mp_result", None)
 
-        with st.status(f"Preparing brief for {client_name.strip()}…", expanded=True) as sb:
-            has_xl = _client_has_excel(client_name.strip())
-            reg    = _registry_entry(client_name.strip())
+        _cn = client_name.strip()
+        _has_xl = _client_has_excel(_cn)
+        _reg    = _registry_entry(_cn)
 
-            if has_xl:
-                st.write("🔍 Loading account data…")
-                found, detail, data = _load_client_sheets(client_name.strip())
-                if not found:
-                    sb.update(label="Data not found", state="error")
-                    st.error(detail)
-                    st.stop()
-                st.write(f"✅ Found: `{detail}`")
-                for sheet in data:
-                    st.write(f"📋 Sheet loaded: **{sheet}**")
-                sb.update(label="Brief ready!", state="complete")
+        if _has_xl:
+            _found, _detail, _data = _load_client_sheets(_cn)
+            if _found:
                 st.session_state["mp_result"] = {
-                    "mode": "excel", "data": data, "client": client_name.strip(), "reg": reg,
+                    "mode": "excel", "data": _data, "client": _cn, "reg": _reg,
                 }
-            elif reg:
-                st.write("📋 Loading registration profile…")
-                sb.update(label="Profile brief ready!", state="complete")
-                st.session_state["mp_result"] = {
-                    "mode": "profile", "data": {}, "client": client_name.strip(), "reg": reg,
-                }
-            else:
-                sb.update(label="Client not found", state="error")
-                st.error(
-                    f"'{client_name.strip()}' is not registered and has no account data. "
-                    "Register the client first."
-                )
-                st.stop()
+        elif _reg:
+            st.session_state["mp_result"] = {
+                "mode": "profile", "data": {}, "client": _cn, "reg": _reg,
+            }
 
     if "mp_result" in st.session_state:
         mp          = st.session_state["mp_result"]
@@ -1643,8 +2081,31 @@ elif page == "👥 Client Profiles":
         intake      = (reg or {}).get("intake", {})
 
         has_xl = (mode == "excel")
+
+        # ── Client header card ────────────────────────────────────────────────
         _html_client_badge(client_name, has_excel=has_xl, has_registry=bool(reg))
-        st.markdown(f"**Prepared:** {datetime.now().strftime('%B %d, %Y  ·  %-I:%M %p')}")
+
+        # Completeness + AUM info row
+        _score = _prep_completeness(client_name)
+        _score_color = "#10B981" if _score >= 80 else "#F59E0B" if _score >= 50 else "#EF4444"
+        _acct_type = intake.get("Account Type", "—")
+        # AUM from demo data if available
+        _demo_aum = next((cd.get("_aum", 0) for cd in _DEMO_CLIENTS if cd["Full Name"].lower() == client_name.lower()), 0)
+        _aum_str = _fmt_money(_demo_aum) if _demo_aum else "—"
+        st.markdown(
+            f'<div style="display:flex;gap:1rem;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;">'
+            f'<span style="color:var(--txt2);font-size:0.82rem;">Type: <strong style="color:var(--txt);">{_acct_type}</strong></span>'
+            f'<span style="color:var(--txt3);">|</span>'
+            f'<span style="color:var(--txt2);font-size:0.82rem;">AUM: <strong style="color:var(--accent);">{_aum_str}</strong></span>'
+            f'<span style="color:var(--txt3);">|</span>'
+            f'<span style="color:var(--txt2);font-size:0.82rem;">Completeness: '
+            f'<strong style="color:{_score_color};">{_score}%</strong></span>'
+            f'<div style="flex:1;min-width:80px;background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;">'
+            f'<div style="width:{_score}%;background:{_score_color};height:100%;border-radius:4px;"></div></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(f"**Prepared:** {datetime.now().strftime('%B %d, %Y')}")
         st.markdown("")
 
         if mode == "excel":
@@ -1926,23 +2387,32 @@ elif page == "🤖 AI Advisor":
         _html_footer()
         st.stop()
 
-    st.markdown(
-        '<div style="color:#334155;font-size:0.77rem;margin-bottom:0.75rem;">'
-        '💡 <em>Try asking:</em> &nbsp;'
-        '"How should I approach this meeting?" &nbsp;·&nbsp; '
-        '"What are the red flags?" &nbsp;·&nbsp; '
-        '"Walk me through the tax picture" &nbsp;·&nbsp; '
-        '"What opportunities am I missing?"'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    # ── Question category chips ───────────────────────────────────────────────
+    _html_section_header("Quick Questions", "💡")
+    _chip_cols = st.columns(5)
+    _chips = [
+        ("📊 Portfolio Review",  f"Give me a full portfolio review for {sel_client}. What are the allocation details, any drift, and key observations?"),
+        ("⚠ Risk Analysis",     f"What are the key risk factors for {sel_client}? Identify concentration risk, sequence-of-returns risk, and any other concerns."),
+        ("🏛 Tax Planning",      f"Walk me through the tax picture for {sel_client}. What are the realized gains/losses, and what tax planning moves should I make before year-end?"),
+        ("📋 Compliance",        f"What compliance items do I need to address for {sel_client}? Check beneficiary designations, suitability, and documentation."),
+        ("💰 Distributions",     f"Analyze the distributions and contributions for {sel_client}. Are the withdrawals sustainable? Any RMD considerations?"),
+    ]
+    for _ci, (_clabel, _cq) in enumerate(_chips):
+        with _chip_cols[_ci]:
+            if st.button(_clabel, key=f"chip_{_ci}", use_container_width=True):
+                st.session_state["aac_pending_q"] = _cq
+                st.rerun()
+
     st.divider()
 
     for msg in history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    question = st.chat_input(f"Ask about {sel_client}…")
+    # Handle pending question from chips
+    pending_q = st.session_state.pop("aac_pending_q", None)
+    typed_q   = st.chat_input(f"Ask about {sel_client}…")
+    question  = pending_q or typed_q
 
     if question:
         history.append({"role": "user", "content": question})
@@ -1961,7 +2431,7 @@ elif page == "🤖 AI Advisor":
                 client_api    = anthropic.Anthropic()
                 try:
                     with client_api.messages.stream(
-                        model      = "claude-opus-4-6",
+                        model      = "claude-sonnet-4-5",
                         max_tokens = 4096,
                         system     = system_prompt,
                         messages   = api_messages,
@@ -2062,6 +2532,17 @@ elif page == "🤖 AI Advisor":
             turns = len(history) // 2
             st.caption(f"Session: {turns} exchange{'s' if turns != 1 else ''} in memory")
 
+    # Compliance disclaimer
+    st.markdown(
+        '<div style="margin-top:1.5rem;padding:0.6rem 1rem;background:var(--bg2);'
+        'border:1px solid var(--border);border-radius:8px;font-size:0.72rem;color:var(--txt3);">'
+        '⚠ <strong>Compliance Notice:</strong> AI-generated analysis is for advisor use only and does not '
+        'constitute investment advice. All recommendations must be reviewed by a licensed fiduciary advisor '
+        'before client communication. Past performance does not guarantee future results.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
     _html_footer()
 
 
@@ -2088,7 +2569,11 @@ elif page == "📋 Operations":
     st.session_state.setdefault("ob_post_checks",  {})
 
     step = st.session_state["ob_step"]
-    _html_step_bar(["Intake", "Forms", "DocuSign", "Post-Close"], step)
+    _html_step_bar(
+        ["Step 1: Select Client (~1 min)", "Step 2: AI Analysis (~30 sec)",
+         "Step 3: DocuSign (~2 min)", "Step 4: Post-Close (~5 min)"],
+        step,
+    )
 
     # ── STEP 0: Intake ────────────────────────────────────────────────────────
     if step == 0:
@@ -2215,7 +2700,7 @@ elif page == "📋 Operations":
                 new_sel.append(fkey)
             # Show form description inline
             st.markdown(
-                f'<div style="font-size:0.77rem;color:#334155;margin:-0.5rem 0 0.5rem 1.5rem;">'
+                f'<div style="font-size:0.77rem;color:var(--txt3);margin:-0.5rem 0 0.5rem 1.5rem;">'
                 f'{fdata["desc"]}</div>',
                 unsafe_allow_html=True,
             )
@@ -2282,7 +2767,7 @@ elif page == "📋 Operations":
                         col_name, col_btn = st.columns([3, 1])
                         with col_name:
                             st.markdown(
-                                f'<div style="color:#E2E8F0;padding:0.5rem 0;">'
+                                f'<div style="color:var(--txt);padding:0.5rem 0;">'
                                 f'<span style="color:#10B981;">✓</span> &nbsp;{label}</div>',
                                 unsafe_allow_html=True,
                             )
@@ -2397,7 +2882,7 @@ elif page == "📋 Operations":
                         st.write(f"📧 CC: **{r2_email or r2_name}**")
                     for fkey in sel_forms:
                         st.write(f"📄 Queued: {FORM_CATALOG[fkey]['label']}")
-                    import time; time.sleep(1)
+                    time.sleep(1)
                     sb.update(label="Envelope sent! (mock)", state="complete")
                     st.session_state["ob_envelope_sent"] = True
                     st.session_state["ob_step"] = 3
@@ -2405,18 +2890,24 @@ elif page == "📋 Operations":
 
         if st.session_state.get("ob_show_email_preview"):
             with st.expander("📧 Welcome Email Preview", expanded=True):
-                st.markdown(f"""
-**To:** {r1_email or r1_name}
-**Subject:** {env_subject}
-
----
-
-{env_message}
-
----
-*This message includes a DocuSign link for the following documents:*
-{chr(10).join(f'• {FORM_CATALOG[fk]["label"]}' for fk in sel_forms)}
-""")
+                _docs_list = chr(10).join(f'• {FORM_CATALOG[fk]["label"]}' for fk in sel_forms)
+                st.markdown(
+                    f'<div style="background:var(--card);border:1px solid var(--border);'
+                    f'border-radius:10px;padding:1.25rem 1.5rem;font-family:monospace;'
+                    f'font-size:0.84rem;color:var(--txt);">'
+                    f'<div style="margin-bottom:0.5rem;color:var(--txt2);">'
+                    f'<strong>To:</strong> {r1_email or r1_name}</div>'
+                    f'<div style="margin-bottom:0.75rem;color:var(--txt2);">'
+                    f'<strong>Subject:</strong> {env_subject}</div>'
+                    f'<hr style="border-color:var(--border);margin:0.75rem 0;">'
+                    f'<pre style="white-space:pre-wrap;color:var(--txt);font-family:inherit;">{env_message}</pre>'
+                    f'<hr style="border-color:var(--border);margin:0.75rem 0;">'
+                    f'<div style="color:var(--txt3);font-size:0.78rem;">'
+                    f'<em>This message includes a DocuSign link for:</em><br>'
+                    f'{_docs_list}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
         col_back2, _ = st.columns([1, 3])
         with col_back2:
