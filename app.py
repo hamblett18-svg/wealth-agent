@@ -1431,18 +1431,21 @@ def _save_to_registry_flat(fields: dict) -> None:
 
 
 def _bootstrap_demo_clients() -> None:
-    """Create demo clients if no clients exist yet."""
+    """Ensure all 8 demo clients exist (adds missing ones, keeps existing)."""
     CLIENTS_DIR.mkdir(parents=True, exist_ok=True)
-    known = _all_known_clients()
-    if known:
-        return
+    known_lower = {n.lower() for n in _all_known_clients()}
+    added = 0
     for cd in _DEMO_CLIENTS:
         name = cd["Full Name"]
+        if name.lower() in known_lower:
+            continue
         fields = {k: v for k, v in cd.items() if not k.startswith("_")}
         _save_to_registry_flat(fields)
         if cd.get("_has_excel", False):
             _create_demo_excel(name, cd)
-    _log_activity("Demo data loaded", "", "8 clients initialized")
+        added += 1
+    if added:
+        _log_activity("Demo data loaded", "", f"{added} demo clients added")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
