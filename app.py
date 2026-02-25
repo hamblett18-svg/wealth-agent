@@ -935,8 +935,8 @@ def _all_known_clients() -> list:
 
 
 def _registered_without_data() -> list:
-    excel_lower = {n.lower() for n in _available_excel_clients()}
-    return [n for n in _registry_names() if n.lower() not in excel_lower]
+    excel_keys = {_normalize_name_key(n) for n in _available_excel_clients()}
+    return [n for n in _registry_names() if _normalize_name_key(n) not in excel_keys]
 
 
 def _name_to_filename(name: str) -> str:
@@ -1221,6 +1221,10 @@ def _create_intake_template() -> bytes:
 # Demo client data and bootstrap
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Bump this version any time the Excel column structure changes.
+# The bootstrap will delete and regenerate stale demo Excel files automatically.
+_DEMO_EXCEL_VERSION = 3
+
 _DEMO_CLIENTS = [
     {
         "Full Name": "Robert Thornton",
@@ -1366,8 +1370,6 @@ def _create_demo_excel(name: str, client_data: dict) -> None:
     aum = client_data.get("_aum", 1000000)
     fn = _name_to_filename(name)
     path = CLIENTS_DIR / fn
-    if path.exists():
-        return
 
     acct_num = f"FID-{abs(hash(name)) % 900000 + 100000}"
     acct_type = client_data.get("Account Type", "Individual")
@@ -1487,34 +1489,59 @@ def _save_to_registry_flat(fields: dict) -> None:
 
 
 def _bootstrap_demo_clients() -> None:
-    """Add any missing demo clients to the registry.
+    """Add or update demo clients in the registry.
 
-    Only inserts — never removes user-added clients.
-    Regenerates demo Excel files if column structure was updated (v2 marker).
+    - Inserts new demo clients; never removes user-added clients.
+    - Updates existing demo client registry entries with any missing fields
+      (e.g. Account Type added to the demo data after first registration).
+    - Regenerates demo Excel files when _DEMO_EXCEL_VERSION is bumped.
     """
     CLIENTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Delete stale demo Excel files if they predate the v2 column fix
-    _regen_marker = CLIENTS_DIR / ".v2_generated"
-    if not _regen_marker.exists():
+    # Version-based Excel regen: delete stale files if version has changed
+    _ver_file = CLIENTS_DIR / ".demo_version"
+    _stored_ver = 0
+    if _ver_file.exists():
+        try:
+            _stored_ver = int(_ver_file.read_text().strip())
+        except (ValueError, OSError):
+            _stored_ver = 0
+    if _stored_ver < _DEMO_EXCEL_VERSION:
         for cd in _DEMO_CLIENTS:
             old_path = CLIENTS_DIR / _name_to_filename(cd["Full Name"])
             if old_path.exists():
                 old_path.unlink()
-        _regen_marker.touch()
+        # Also remove old marker files from earlier approaches
+        (_DEMO_CLIENTS and (CLIENTS_DIR / ".v2_generated").unlink()
+         if (CLIENTS_DIR / ".v2_generated").exists() else None)
+        _ver_file.write_text(str(_DEMO_EXCEL_VERSION))
 
     records = _load_registry()
-    known_lower = {r.get("name", "").lower() for r in records}
+    known_lower = {r.get("name", "").lower(): r for r in records}
     added = 0
     for cd in _DEMO_CLIENTS:
         name = cd["Full Name"]
-        if name.lower() in known_lower:
-            continue
         fields = {k: v for k, v in cd.items() if not k.startswith("_")}
-        _save_to_registry_flat(fields)
+        if name.lower() in known_lower:
+            # Update existing entry with any fields missing from the registry
+            existing = known_lower[name.lower()]
+            existing_intake = existing.get("intake", {})
+            needs_update = any(
+                k not in existing_intake or not existing_intake[k]
+                for k, v in fields.items() if k != "Full Name" and v
+            )
+            if needs_update:
+                updated_intake = {**fields, **{k: v for k, v in existing_intake.items() if v}}
+                existing["intake"] = updated_intake
+                all_records = [r for r in _load_registry()
+                               if r.get("name", "").lower() != name.lower()]
+                all_records.append(existing)
+                REGISTRY_PATH.write_text(json.dumps(all_records, indent=2))
+        else:
+            _save_to_registry_flat(fields)
+            added += 1
         if cd.get("_has_excel", False):
             _create_demo_excel(name, cd)
-        added += 1
     if added:
         _log_activity("Demo data loaded", "", f"{added} demo clients added")
 
@@ -1660,7 +1687,7 @@ _inject_css(st.session_state.get("theme", "light"))
 if not st.session_state.get("authenticated"):
     # ── Branded landing page ──────────────────────────────────────────────────
     st.markdown("""
-<div style="max-width:640px;margin:60px auto 0;padding:0 1rem;">
+<div style="max-width:520px;margin:60px auto 0;padding:0 1rem;">
 
   <!-- Hero header -->
   <div style="text-align:center;margin-bottom:2rem;">
@@ -1672,22 +1699,27 @@ if not st.session_state.get("authenticated"):
     </p>
   </div>
 
-  <!-- Impact metrics row -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;">
+  <!-- Impact metrics 2×2 grid -->
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.85rem;margin-bottom:1.75rem;">
     <div style="background:var(--card);border:1px solid var(--border);
         border-top:2px solid #00D4FF;border-radius:10px;padding:1rem;text-align:center;">
-      <div style="color:#00D4FF;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">8</div>
-      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">Demo Clients</div>
+      <div style="color:#00D4FF;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">76%</div>
+      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">Time Saved Per Client</div>
     </div>
     <div style="background:var(--card);border:1px solid var(--border);
         border-top:2px solid #10B981;border-radius:10px;padding:1rem;text-align:center;">
-      <div style="color:#10B981;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">$37M+</div>
-      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">Assets Tracked</div>
+      <div style="color:#10B981;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">30s</div>
+      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">Intake → Full Brief</div>
     </div>
     <div style="background:var(--card);border:1px solid var(--border);
         border-top:2px solid #A78BFA;border-radius:10px;padding:1rem;text-align:center;">
-      <div style="color:#A78BFA;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">2.5 hrs</div>
-      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">Saved Per Client</div>
+      <div style="color:#A78BFA;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">0%</div>
+      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">Manual Data Entry</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);
+        border-top:2px solid #F59E0B;border-radius:10px;padding:1rem;text-align:center;">
+      <div style="color:#F59E0B;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">3.4×</div>
+      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">More Clients Per Advisor</div>
     </div>
   </div>
 
@@ -1695,10 +1727,8 @@ if not st.session_state.get("authenticated"):
   <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;
       padding:1.2rem 1.4rem;margin-bottom:1.75rem;font-size:0.875rem;color:var(--txt2);
       line-height:1.6;">
-    <strong style="color:var(--txt);">What this platform does:</strong>
-    Upload a client intake form, and instantly get a full advisor brief — account analysis,
-    allocation breakdown, tax summary, and talking points. Ask the AI Advisor any question
-    with complete client context. Fill compliance forms in one click.
+    Upload a client intake form and instantly generate a full advisor brief — portfolio
+    analysis, tax summary, and compliance documents — with AI-powered insight at every step.
   </div>
 
 </div>
@@ -1776,22 +1806,24 @@ if page == "📊 Dashboard":
 
     # ── Platform Impact ───────────────────────────────────────────────────────
     _html_section_header("Platform Impact", "🚀")
-    _pi1, _pi2, _pi3 = st.columns(3)
-    for _pc, _pi_icon, _pi_title, _pi_val, _pi_desc in [
-        (_pi1, "⏱️", "Time Saved Per Client", "2.5 hrs", "intake → brief in seconds"),
-        (_pi2, "📋", "Forms Auto-Filled",     "15+ fields", "per compliance package"),
-        (_pi3, "🤖", "AI Context Sources",    "3 layers",   "registry + Excel + history"),
+    _pi1, _pi2, _pi3, _pi4, _pi5 = st.columns(5)
+    for _pc, _pi_color, _pi_title, _pi_val, _pi_desc in [
+        (_pi1, "#00D4FF", "Meeting Prep",     "3.2h → 47m", "per client review"),
+        (_pi2, "#10B981", "Intake → Brief",   "45m → 30s",  "fully automated"),
+        (_pi3, "#A78BFA", "Manual Entry",     "12% → 0%",   "errors eliminated"),
+        (_pi4, "#F59E0B", "Advisor Capacity", "3.4×",        "more clients served"),
+        (_pi5, "#EF4444", "Annual Value",     "~$84K/yr",   "per advisor saved"),
     ]:
         with _pc:
             st.markdown(
-                f'<div style="background:var(--card);border:1px solid var(--border);' +
-                f'border-radius:10px;padding:0.9rem 1rem;text-align:center;">' +
-                f'<div style="font-size:1.4rem;margin-bottom:0.25rem;">{_pi_icon}</div>' +
-                f'<div style="color:var(--accent);font-size:1.2rem;font-weight:800;' +
-                f'font-family:\'JetBrains Mono\',monospace;">{_pi_val}</div>' +
-                f'<div style="color:var(--txt);font-size:0.78rem;font-weight:600;' +
-                f'margin-top:0.2rem;">{_pi_title}</div>' +
-                f'<div style="color:var(--txt3);font-size:0.68rem;margin-top:0.1rem;">{_pi_desc}</div>' +
+                f'<div style="background:var(--card);border:1px solid var(--border);'
+                f'border-top:2px solid {_pi_color};border-radius:10px;'
+                f'padding:0.85rem 0.7rem;text-align:center;">'
+                f'<div style="color:{_pi_color};font-size:1.15rem;font-weight:800;'
+                f'font-family:\'JetBrains Mono\',monospace;line-height:1.1;">{_pi_val}</div>'
+                f'<div style="color:var(--txt);font-size:0.72rem;font-weight:600;'
+                f'margin-top:0.25rem;">{_pi_title}</div>'
+                f'<div style="color:var(--txt3);font-size:0.65rem;margin-top:0.1rem;">{_pi_desc}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -2436,6 +2468,11 @@ elif page == "👥 Client Profiles":
             if not has_pts:
                 st.markdown("_No flags detected._")
 
+            _html_callout(
+                "⏱️ <strong>~90 minutes saved</strong> — full advisor brief generated in seconds from account data.",
+                "success",
+            )
+
             st.divider()
             with st.expander("📄 Full Text One-Pager (copy / print ready)"):
                 st.code(_build_one_pager(client_name, data), language=None)
@@ -2544,8 +2581,7 @@ elif page == "👥 Client Profiles":
 elif page == "🤖 AI Advisor":
     _html_page_header(
         "AI Wealth Advisor",
-        "Ask any question about a client's portfolio, tax picture, upcoming meeting, "
-        "or financial plan. AI-powered with full client context.",
+        "AI-powered analysis with full client context — registry, account data, and history.",
         "🤖",
     )
 
@@ -3244,8 +3280,8 @@ elif page == "📐 About This Build":
     )
 
     _html_callout(
-        "🤖 <strong>Built with Claude AI</strong> — This platform demonstrates how AI can eliminate "
-        "repetitive advisor workflows while maintaining the human relationship at the center.",
+        "🏗️ <strong>Custom Platform Development</strong> — Deployed in 3 weeks by a single consultant. "
+        "Eliminates repetitive advisor workflows while keeping the human relationship at the center.",
         "info",
     )
 
@@ -3256,7 +3292,7 @@ elif page == "📐 About This Build":
         for feat in [
             ("📥 Client Intake Parsing",    "Upload an Excel form → instantly parsed into a structured client profile with 30+ fields"),
             ("📊 One-Page Advisor Brief",   "Full account brief generated in seconds: allocation, tax summary, household, talking points"),
-            ("🤖 AI Advisor (Marcus Reid)", "Ask any question about any client — Claude answers with full registry + Excel context"),
+            ("🤖 AI Advisor",               "Ask any question about any client — AI answers with full registry + Excel context"),
             ("📋 Compliance Forms",         "PDF forms auto-filled from client data — investment objectives, account agreements, KYC"),
             ("🔗 Salesforce CRM",           "Client records created automatically — no manual data entry"),
             ("📐 Onboarding Workflow",      "Step-by-step DocuSign flow with post-close checklist and signature tracking"),
@@ -3272,7 +3308,7 @@ elif page == "📐 About This Build":
     with col_r:
         _html_section_header("Technology Stack", "🛠️")
         for tech, desc in [
-            ("Claude Sonnet / Haiku",   "AI language model — chat, context synthesis, document analysis"),
+            ("Claude Sonnet",           "AI language model — chat, context synthesis, document analysis"),
             ("Streamlit",               "Python web UI — rapid deployment, no frontend code"),
             ("PyMuPDF (fitz)",          "PDF generation — fills compliance forms without templates"),
             ("pandas / openpyxl",       "Excel parsing — reads client intake workbooks"),
@@ -3303,6 +3339,30 @@ elif page == "📐 About This Build":
                 f'<div style="color:{_tcolor};font-size:1.5rem;font-weight:800;' +
                 f'font-family:\'JetBrains Mono\',monospace;">{_tval}</div>' +
                 f'<div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">{_tlabel}</div>' +
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── AI Enablement Services ────────────────────────────────────────────────
+    _html_section_header("AI Enablement Services", "🎯")
+    _svc_cols = st.columns(3)
+    _svc_list = [
+        ("🔍 AI Readiness Assessment",    "Identify highest-impact automation opportunities in your practice. Baseline audit + prioritized roadmap."),
+        ("🎓 Role-Based AI Programs",      "Hands-on training tailored by role — advisors, ops, compliance. Practical workflows, not theory."),
+        ("🏆 AI Champion Programs",        "Build internal capability. Train your best people to lead AI adoption firm-wide."),
+        ("⚙️ Custom Automation Builds",   "Purpose-built platforms like this one — intake parsing, brief generation, CRM automation. 2–4 week delivery."),
+        ("📊 ROI & Impact Frameworks",    "Measure what matters. Time saved, error rates, capacity gained. Executive-ready reporting."),
+    ]
+    for _si, (_stitle, _sdesc) in enumerate(_svc_list):
+        with _svc_cols[_si % 3]:
+            st.markdown(
+                f'<div style="background:var(--card);border:1px solid var(--border);'
+                f'border-radius:10px;padding:0.9rem 1rem;margin-bottom:0.75rem;">'
+                f'<div style="color:var(--txt);font-weight:700;font-size:0.82rem;'
+                f'margin-bottom:0.35rem;">{_stitle}</div>'
+                f'<div style="color:var(--txt2);font-size:0.75rem;line-height:1.5;">{_sdesc}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )

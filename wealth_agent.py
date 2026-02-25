@@ -20,6 +20,7 @@ Mock mode (no API key required):
 """
 
 import os
+import re
 import sys
 import json
 import argparse
@@ -36,7 +37,7 @@ import pandas as pd
 
 DATA_DIR    = Path("data")
 CLIENTS_DIR = DATA_DIR / "clients"
-MODEL       = "claude-opus-4-6"
+MODEL       = "claude-sonnet-4-5-20250929"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Mock Salesforce Client
@@ -235,7 +236,7 @@ def find_client_file(client_name: str) -> str:
     Args:
         client_name: Client full name, e.g. 'Robert Thornton'.
     """
-    slug      = client_name.lower().replace(" ", "_") + ".xlsx"
+    slug      = re.sub(r"[^\w]+", "_", client_name.lower()).strip("_") + ".xlsx"
     all_files = list(CLIENTS_DIR.glob("*.xlsx"))
 
     # Exact slug match
@@ -244,8 +245,8 @@ def find_client_file(client_name: str) -> str:
             return json.dumps({"found": True, "path": str(f),
                                 "sheets": pd.ExcelFile(str(f)).sheet_names})
 
-    # Partial: all name parts somewhere in the stem
-    parts = client_name.lower().split()
+    # Partial: all name parts (apostrophes stripped) somewhere in the stem
+    parts = re.sub(r"[^a-z0-9 ]", "", client_name.lower()).split()
     for f in all_files:
         if all(p in f.stem for p in parts):
             return json.dumps({"found": True, "path": str(f),
