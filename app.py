@@ -1528,59 +1528,67 @@ with st.sidebar:
     )
     st.divider()
 
-    # ── Bootstrap demo clients ───────────────────────────────────────────────
-    _bootstrap_demo_clients()
+    if st.session_state.get("authenticated"):
+        # ── Bootstrap demo clients ───────────────────────────────────────────
+        _bootstrap_demo_clients()
 
-    # ── Client Roster ─────────────────────────────────────────────────────────
-    all_clients = _all_known_clients()
-    n_clients   = len(all_clients)
-    n_pipeline  = len([c for c in all_clients if not _client_has_excel(c)])
+        # ── Client Roster ─────────────────────────────────────────────────────
+        all_clients = _all_known_clients()
+        n_clients   = len(all_clients)
+        n_pipeline  = len([c for c in all_clients if not _client_has_excel(c)])
 
-    st.markdown(
-        f'<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">'
-        f'<div style="flex:1;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.15);'
-        f'border-radius:7px;padding:0.4rem 0.3rem;text-align:center;">'
-        f'<div style="color:#00D4FF;font-size:1rem;font-weight:700;">{n_clients}</div>'
-        f'<div style="color:#475569;font-size:0.58rem;letter-spacing:0.08em;">CLIENTS</div>'
-        f'</div>'
-        f'<div style="flex:1;background:rgba(167,139,250,0.07);border:1px solid rgba(167,139,250,0.15);'
-        f'border-radius:7px;padding:0.4rem 0.3rem;text-align:center;">'
-        f'<div style="color:#A78BFA;font-size:1rem;font-weight:700;">{n_pipeline}</div>'
-        f'<div style="color:#475569;font-size:0.58rem;letter-spacing:0.08em;">PIPELINE</div>'
-        f'</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    if all_clients:
         st.markdown(
-            '<div style="color:#334155;font-size:0.57rem;font-weight:700;'
-            'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.3rem;">'
-            '👥 CLIENT ROSTER</div>',
+            f'<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">'
+            f'<div style="flex:1;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.15);'
+            f'border-radius:7px;padding:0.4rem 0.3rem;text-align:center;">'
+            f'<div style="color:#00D4FF;font-size:1rem;font-weight:700;">{n_clients}</div>'
+            f'<div style="color:#475569;font-size:0.58rem;letter-spacing:0.08em;">CLIENTS</div>'
+            f'</div>'
+            f'<div style="flex:1;background:rgba(167,139,250,0.07);border:1px solid rgba(167,139,250,0.15);'
+            f'border-radius:7px;padding:0.4rem 0.3rem;text-align:center;">'
+            f'<div style="color:#A78BFA;font-size:1rem;font-weight:700;">{n_pipeline}</div>'
+            f'<div style="color:#475569;font-size:0.58rem;letter-spacing:0.08em;">PIPELINE</div>'
+            f'</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
-        for cn in all_clients:
-            has_xl = _client_has_excel(cn)
-            status = "🟢" if has_xl else "🟡"
-            if st.button(
-                f"{status} {cn}",
-                key=f"sb_client_{cn}",
-                use_container_width=True,
-            ):
-                st.session_state["_jump_page"]    = "Client Profiles"
-                st.session_state["mp_sel_client"] = cn
-                st.rerun()
 
-    st.divider()
+        if all_clients:
+            st.markdown(
+                '<div style="color:#334155;font-size:0.57rem;font-weight:700;'
+                'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.3rem;">'
+                '👥 CLIENT ROSTER</div>',
+                unsafe_allow_html=True,
+            )
+            for cn in all_clients:
+                has_xl = _client_has_excel(cn)
+                status = "🟢" if has_xl else "🟡"
+                if st.button(
+                    f"{status} {cn}",
+                    key=f"sb_client_{cn}",
+                    use_container_width=True,
+                ):
+                    st.session_state["_jump_page"]    = "Client Profiles"
+                    st.session_state["mp_sel_client"] = cn
+                    st.rerun()
 
-    # ── Download Intake Template ──────────────────────────────────────────────
-    st.download_button(
-        label="⬇ Download Intake Template",
-        data=_create_intake_template(),
-        file_name="client_intake_template.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
+        st.divider()
+
+        # ── Download Intake Template ─────────────────────────────────────────
+        st.download_button(
+            label="⬇ Download Intake Template",
+            data=_create_intake_template(),
+            file_name="client_intake_template.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    else:
+        st.markdown(
+            '<div style="background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.12);'
+            'border-radius:8px;padding:0.8rem;text-align:center;color:#475569;font-size:0.78rem;">'
+            '🔒 Sign in to view your client roster</div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
