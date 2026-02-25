@@ -1431,18 +1431,13 @@ def _save_to_registry_flat(fields: dict) -> None:
 
 
 def _bootstrap_demo_clients() -> None:
-    """Ensure registry contains exactly the 8 demo clients (purges non-demo entries)."""
+    """Add any missing demo clients to the registry.
+
+    Only inserts — never removes user-added clients.
+    """
     CLIENTS_DIR.mkdir(parents=True, exist_ok=True)
-    demo_names_lower = {cd["Full Name"].lower() for cd in _DEMO_CLIENTS}
-
-    # Remove any non-demo clients (e.g. sample data from old app)
     records = _load_registry()
-    cleaned = [r for r in records if r.get("name", "").lower() in demo_names_lower]
-    if len(cleaned) != len(records):
-        REGISTRY_PATH.write_text(json.dumps(cleaned, indent=2))
-
-    # Add any missing demo clients
-    known_lower = {r.get("name", "").lower() for r in cleaned}
+    known_lower = {r.get("name", "").lower() for r in records}
     added = 0
     for cd in _DEMO_CLIENTS:
         name = cd["Full Name"]
