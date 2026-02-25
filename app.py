@@ -143,13 +143,58 @@ st.markdown("""
   --glow-lg:  0 0 40px rgba(0,212,255,0.2), 0 0 80px rgba(124,58,237,0.1);
 }
 
-/* ── Base ── */
+/* ── Base — force light text everywhere in main area ── */
 html, body, [class*="css"] {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  color: var(--txt);
+  color: var(--txt) !important;
 }
 .stApp {
   background: var(--bg) !important;
+  color: var(--txt) !important;
+}
+
+/* Main content text — override Streamlit's black defaults */
+.main p,
+.main span,
+.main div,
+.main li,
+.main label,
+.main h1, .main h2, .main h3, .main h4,
+.stMarkdown p,
+.stMarkdown span,
+.stMarkdown li,
+.stMarkdown strong,
+.stMarkdown em,
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] span,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] strong,
+[data-testid="column"] p,
+[data-testid="column"] span,
+[data-testid="column"] li {
+  color: #CBD5E1 !important;
+}
+
+/* Labels for inputs/radio/checkbox in main area */
+.main label p,
+.main .stRadio label p,
+.main .stCheckbox label p,
+.main [data-testid="stRadio"] label p,
+[data-testid="stWidgetLabel"] p,
+[data-testid="stWidgetLabel"] label {
+  color: #94A3B8 !important;
+}
+
+/* Strong / bold text slightly brighter */
+.main .stMarkdown strong,
+[data-testid="stMarkdownContainer"] strong {
+  color: #E2E8F0 !important;
+}
+
+/* st.info / st.warning / st.success / st.error text */
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] span {
+  color: #CBD5E1 !important;
 }
 .stApp::before {
   content: '';
@@ -361,7 +406,31 @@ hr {
 .stError   { background: rgba(239,68,68,0.06) !important; border-color: rgba(239,68,68,0.25) !important; }
 
 /* ── Caption ── */
-.stCaption p { color: var(--txt3) !important; font-size: 0.75rem !important; }
+.stCaption p { color: #64748B !important; font-size: 0.75rem !important; }
+
+/* ── Selectbox dropdown text ── */
+.stSelectbox [data-baseweb="select"] span,
+.stSelectbox [data-baseweb="select"] div[class*="placeholder"],
+.stSelectbox [data-baseweb="menu"] li {
+  color: #CBD5E1 !important;
+}
+
+/* ── Text input typed text ── */
+.stTextInput input, .stTextArea textarea {
+  color: #E2E8F0 !important;
+}
+
+/* ── Expander header text ── */
+.streamlit-expanderHeader p,
+.streamlit-expanderHeader span {
+  color: #94A3B8 !important;
+}
+
+/* ── Code blocks ── */
+.stCodeBlock code, pre {
+  background: rgba(0,0,0,0.4) !important;
+  color: #7DD3FC !important;
+}
 
 /* ── Tab-like step indicators ── */
 .ai-step-row { display: flex; gap: 0; margin-bottom: 2rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
