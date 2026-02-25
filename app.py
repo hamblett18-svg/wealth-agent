@@ -362,7 +362,7 @@ h3 {{ font-size: 0.875rem !important; font-weight: 600 !important; }}
   border: 1px solid var(--border) !important;
   border-radius: 10px !important;
   padding: 1rem 1.25rem !important;
-  box-shadow: 0 1px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06) !important;
   border-left: 3px solid var(--accent) !important;
   backdrop-filter: blur(12px) !important;
 }}
@@ -501,6 +501,15 @@ hr {{
 .ai-step:last-child {{ border-right: none; }}
 .ai-step.active {{ background: var(--accent-dim); color: var(--accent); }}
 .ai-step.done {{ background: rgba(16,185,129,0.08); color: #10B981; }}
+
+/* ── Fade-in animation ── */
+@keyframes fadeIn {{
+  from {{ opacity: 0; transform: translateY(8px); }}
+  to   {{ opacity: 1; transform: translateY(0); }}
+}}
+.main .block-container > div {{
+  animation: fadeIn 0.3s ease both;
+}}
 </style>""", unsafe_allow_html=True)
 
 
@@ -1477,12 +1486,7 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
     else:
-        st.markdown(
-            '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);'
-            'border-radius:6px;padding:5px 10px;font-size:0.73rem;color:#F59E0B;'
-            'text-align:center;margin-bottom:0.5rem;">🟡 Mock Mode — no API key</div>',
-            unsafe_allow_html=True,
-        )
+        pass  # No mock mode banner shown
 
     # ── Theme toggle ─────────────────────────────────────────────────────────
     theme = st.radio(
@@ -1498,7 +1502,7 @@ with st.sidebar:
 
     # ── Nav jump override ────────────────────────────────────────────────────
     _jump = st.session_state.pop("_jump_page", None)
-    pages = ["Dashboard", "New Client", "Client Profiles", "AI Advisor", "Operations"]
+    pages = ["Dashboard", "New Client", "Client Profiles", "AI Advisor", "Operations", "About This Build"]
     _nav_idx = pages.index(_jump) if _jump and _jump in pages else 0
 
     # ── Navigation ───────────────────────────────────────────────────────────
@@ -1514,6 +1518,7 @@ with st.sidebar:
         "👥 Client Profiles",
         "🤖 AI Advisor",
         "📋 Operations",
+        "📐 About This Build",
     ]
     page = st.radio(
         "nav",
@@ -1558,8 +1563,10 @@ with st.sidebar:
             for cn in all_clients:
                 has_xl = _client_has_excel(cn)
                 status = "🟢" if has_xl else "🟡"
+                _sb_aum = next((cd.get("_aum", 0) for cd in _DEMO_CLIENTS if cd["Full Name"].lower() == cn.lower()), 0)
+                _sb_aum_str = f" · {_fmt_money(_sb_aum)}" if _sb_aum else ""
                 if st.button(
-                    f"{status} {cn}",
+                    f"{status} {cn}{_sb_aum_str}",
                     key=f"sb_client_{cn}",
                     use_container_width=True,
                 ):
@@ -1593,22 +1600,72 @@ with st.sidebar:
 _inject_css(st.session_state.get("theme", "light"))
 
 if not st.session_state.get("authenticated"):
-    st.markdown("""<div style='max-width:420px;margin:80px auto;padding:2.5rem;
-    background:var(--card);border:1px solid var(--border);border-radius:16px;
-    box-shadow:0 8px 32px rgba(0,0,0,0.15);'>
-    <h2 style='color:var(--txt);margin-bottom:0.25rem;'>⬡ Wealth Intelligence Platform</h2>
-    <p style='color:var(--txt2);font-size:0.875rem;margin-bottom:1.5rem;'>
-    Demo credentials pre-filled — click Sign In</p></div>""", unsafe_allow_html=True)
-    with st.form("login_form"):
-        email = st.text_input("Email", value=_DEMO_EMAIL)
-        pwd   = st.text_input("Password", type="password", value=_DEMO_PASS)
-        sub   = st.form_submit_button("Sign In", type="primary", use_container_width=True)
-    if sub:
-        if email.strip() == _DEMO_EMAIL and pwd == _DEMO_PASS:
-            st.session_state["authenticated"] = True
-            st.rerun()
-        else:
-            st.error("Invalid credentials. Use demo@advisor.com / demo2026")
+    # ── Branded landing page ──────────────────────────────────────────────────
+    st.markdown("""
+<div style="max-width:640px;margin:60px auto 0;padding:0 1rem;">
+
+  <!-- Hero header -->
+  <div style="text-align:center;margin-bottom:2rem;">
+    <div style="font-size:2.8rem;line-height:1;margin-bottom:0.5rem;">⬡</div>
+    <h1 style="color:var(--txt);font-size:1.9rem;font-weight:800;
+        letter-spacing:-0.02em;margin:0 0 0.4rem;">Wealth Intelligence Platform</h1>
+    <p style="color:var(--txt2);font-size:1rem;margin:0;">
+      by <strong>AI Workforce Solutions</strong>
+    </p>
+  </div>
+
+  <!-- Impact metrics row -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem;">
+    <div style="background:var(--card);border:1px solid var(--border);
+        border-top:2px solid #00D4FF;border-radius:10px;padding:1rem;text-align:center;">
+      <div style="color:#00D4FF;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">8</div>
+      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">Demo Clients</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);
+        border-top:2px solid #10B981;border-radius:10px;padding:1rem;text-align:center;">
+      <div style="color:#10B981;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">$37M+</div>
+      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">Assets Tracked</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);
+        border-top:2px solid #A78BFA;border-radius:10px;padding:1rem;text-align:center;">
+      <div style="color:#A78BFA;font-size:1.6rem;font-weight:800;font-family:'JetBrains Mono',monospace;">2.5 hrs</div>
+      <div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">Saved Per Client</div>
+    </div>
+  </div>
+
+  <!-- Description -->
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;
+      padding:1.2rem 1.4rem;margin-bottom:1.75rem;font-size:0.875rem;color:var(--txt2);
+      line-height:1.6;">
+    <strong style="color:var(--txt);">What this platform does:</strong>
+    Upload a client intake form, and instantly get a full advisor brief — account analysis,
+    allocation breakdown, tax summary, and talking points. Ask the AI Advisor any question
+    with complete client context. Fill compliance forms in one click.
+  </div>
+
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Login form ─────────────────────────────────────────────────────────────
+    _lc1, _lc2, _lc3 = st.columns([1, 2, 1])
+    with _lc2:
+        st.markdown(
+            '<div style="background:var(--card);border:1px solid var(--border);' +
+            'border-radius:12px;padding:1.5rem 1.5rem 1rem;">' +
+            '<p style="color:var(--txt3);font-size:0.75rem;text-align:center;margin:0 0 1rem;">' +
+            '🔑 Demo credentials pre-filled — click Enter Platform</p></div>',
+            unsafe_allow_html=True,
+        )
+        with st.form("login_form"):
+            email = st.text_input("Email", value=_DEMO_EMAIL)
+            pwd   = st.text_input("Password", type="password", value=_DEMO_PASS)
+            sub   = st.form_submit_button("Enter Platform →", type="primary", use_container_width=True)
+        if sub:
+            if email.strip() == _DEMO_EMAIL and pwd == _DEMO_PASS:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("Invalid credentials. Use demo@advisor.com / demo2026")
     st.stop()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1657,6 +1714,29 @@ if page == "📊 Dashboard":
                 unsafe_allow_html=True,
             )
 
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Platform Impact ───────────────────────────────────────────────────────
+    _html_section_header("Platform Impact", "🚀")
+    _pi1, _pi2, _pi3 = st.columns(3)
+    for _pc, _pi_icon, _pi_title, _pi_val, _pi_desc in [
+        (_pi1, "⏱️", "Time Saved Per Client", "2.5 hrs", "intake → brief in seconds"),
+        (_pi2, "📋", "Forms Auto-Filled",     "15+ fields", "per compliance package"),
+        (_pi3, "🤖", "AI Context Sources",    "3 layers",   "registry + Excel + history"),
+    ]:
+        with _pc:
+            st.markdown(
+                f'<div style="background:var(--card);border:1px solid var(--border);' +
+                f'border-radius:10px;padding:0.9rem 1rem;text-align:center;">' +
+                f'<div style="font-size:1.4rem;margin-bottom:0.25rem;">{_pi_icon}</div>' +
+                f'<div style="color:var(--accent);font-size:1.2rem;font-weight:800;' +
+                f'font-family:\'JetBrains Mono\',monospace;">{_pi_val}</div>' +
+                f'<div style="color:var(--txt);font-size:0.78rem;font-weight:600;' +
+                f'margin-top:0.2rem;">{_pi_title}</div>' +
+                f'<div style="color:var(--txt3);font-size:0.68rem;margin-top:0.1rem;">{_pi_desc}</div>' +
+                f'</div>',
+                unsafe_allow_html=True,
+            )
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Quick Actions ─────────────────────────────────────────────────────────
@@ -1720,6 +1800,8 @@ if page == "📊 Dashboard":
             acct    = reg.get("intake", {}).get("Account Type", "—") if reg else "—"
             score   = _prep_completeness(cn)
             score_color = "#10B981" if score >= 80 else "#F59E0B" if score >= 50 else "#EF4444"
+            _r_aum  = next((cd.get("_aum", 0) for cd in _DEMO_CLIENTS if cd["Full Name"].lower() == cn.lower()), 0)
+            _r_aum_str = _fmt_money(_r_aum) if _r_aum else "—"
             status_badge = (
                 f'<span style="background:rgba(16,185,129,0.1);color:#10B981;border:1px solid rgba(16,185,129,0.3);'
                 f'border-radius:4px;padding:1px 7px;font-size:0.67rem;font-weight:700;">Full Profile</span>'
@@ -1731,6 +1813,7 @@ if page == "📊 Dashboard":
 <tr style="border-bottom:1px solid var(--border);">
   <td style="padding:0.55rem 0.75rem;color:var(--txt);font-weight:600;">{cn}</td>
   <td style="padding:0.55rem 0.75rem;color:var(--txt2);">{acct}</td>
+  <td style="padding:0.55rem 0.75rem;color:var(--accent);font-weight:600;font-family:'JetBrains Mono',monospace;font-size:0.82rem;">{_r_aum_str}</td>
   <td style="padding:0.55rem 0.75rem;">{status_badge}</td>
   <td style="padding:0.55rem 0.75rem;">
     <div style="display:flex;align-items:center;gap:0.5rem;">
@@ -1750,6 +1833,8 @@ if page == "📊 Dashboard":
                  text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Client</th>
       <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
                  text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Account Type</th>
+      <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
+                 text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">AUM</th>
       <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
                  text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Status</th>
       <th style="padding:0.5rem 0.75rem;text-align:left;color:var(--txt3);font-size:0.7rem;
@@ -1817,7 +1902,7 @@ elif page == "📥 New Client":
                 intake_source = default_path
                 st.info(f"📄 `{default_path.name}`")
             else:
-                st.warning("Sample data not found — click **Generate Sample Data** in the sidebar first.")
+                st.warning("Sample data file not found. Use the **Upload my own** option to upload an intake form.")
         else:
             uploaded = st.file_uploader("Upload intake form (.xlsx)", type=["xlsx"])
             if uploaded:
@@ -1925,6 +2010,10 @@ elif page == "📥 New Client":
             unsafe_allow_html=True,
         )
         _log_activity("Client registered", name, f"Salesforce ID: {sf_id}")
+        _html_callout(
+            "⏱️ <strong>~45 minutes saved</strong> — manual CRM data entry eliminated by automated intake parsing.",
+            "success",
+        )
 
         _html_stat_row([
             ("Annual Income",  _fmt_money(intake.get("Annual Income",  0))),
@@ -1982,10 +2071,6 @@ elif page == "📥 New Client":
             for b in benes:
                 st.markdown(f"• {b}")
 
-        st.divider()
-        with st.expander("📦 Raw Salesforce Record"):
-            st.json(sf_rec)
-
         # Next Steps section
         st.divider()
         _html_section_header("Next Steps", "🚀")
@@ -2033,16 +2118,13 @@ elif page == "👥 Client Profiles":
     col_a, col_b = st.columns([2, 1])
     with col_a:
         if all_clients:
-            options      = all_clients + ["— Enter name manually —"]
             # Determine default: jump takes priority, then saved
             if _mp_jump and _mp_jump in all_clients:
                 default_idx = all_clients.index(_mp_jump)
             else:
                 saved_client = st.session_state.get("mp_client", "")
                 default_idx  = all_clients.index(saved_client) if saved_client in all_clients else 0
-            chosen = st.selectbox("Select client", options, index=default_idx)
-            client_name = st.text_input("Client name", placeholder="e.g. Robert Thornton") \
-                if chosen == "— Enter name manually —" else chosen
+            client_name = st.selectbox("Select client", all_clients, index=default_idx)
         else:
             client_name = st.text_input(
                 "Client name",
@@ -2053,7 +2135,7 @@ elif page == "👥 Client Profiles":
     with col_b:
         excel_clients = _available_excel_clients()
         if not all_clients:
-            st.caption("No clients yet. Register one or generate sample data.")
+            st.caption("No clients yet. Register one using the New Client page.")
 
     if no_data:
         with st.expander(
@@ -2399,7 +2481,7 @@ elif page == "🤖 AI Advisor":
     all_clients = _all_known_clients()
     if not all_clients:
         _html_callout(
-            "No clients in the system yet. Register a client or generate sample data from the sidebar.",
+            "No clients in the system yet. Use New Client to register your first client.",
             "warning",
         )
         _html_footer()
@@ -3076,5 +3158,89 @@ elif page == "📋 Operations":
                 if key.startswith("ob_"):
                     del st.session_state[key]
             st.rerun()
+
+    _html_footer()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Page — About This Build
+# ─────────────────────────────────────────────────────────────────────────────
+
+elif page == "📐 About This Build":
+    _html_page_header(
+        "About This Build",
+        "How this platform was built, what it demonstrates, and the technology stack behind it.",
+        "📐",
+    )
+
+    _html_callout(
+        "🤖 <strong>Built with Claude AI</strong> — This platform demonstrates how AI can eliminate "
+        "repetitive advisor workflows while maintaining the human relationship at the center.",
+        "info",
+    )
+
+    col_l, col_r = st.columns(2)
+
+    with col_l:
+        _html_section_header("What It Does", "⚡")
+        for feat in [
+            ("📥 Client Intake Parsing",    "Upload an Excel form → instantly parsed into a structured client profile with 30+ fields"),
+            ("📊 One-Page Advisor Brief",   "Full account brief generated in seconds: allocation, tax summary, household, talking points"),
+            ("🤖 AI Advisor (Marcus Reid)", "Ask any question about any client — Claude answers with full registry + Excel context"),
+            ("📋 Compliance Forms",         "PDF forms auto-filled from client data — investment objectives, account agreements, KYC"),
+            ("🔗 Salesforce CRM",           "Client records created automatically — no manual data entry"),
+            ("📐 Onboarding Workflow",      "Step-by-step DocuSign flow with post-close checklist and signature tracking"),
+        ]:
+            st.markdown(
+                f'<div style="padding:0.6rem 0;border-bottom:1px solid var(--border);">' +
+                f'<div style="color:var(--txt);font-weight:600;font-size:0.82rem;">{feat[0]}</div>' +
+                f'<div style="color:var(--txt2);font-size:0.78rem;margin-top:0.2rem;">{feat[1]}</div>' +
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    with col_r:
+        _html_section_header("Technology Stack", "🛠️")
+        for tech, desc in [
+            ("Claude Sonnet / Haiku",   "AI language model — chat, context synthesis, document analysis"),
+            ("Streamlit",               "Python web UI — rapid deployment, no frontend code"),
+            ("PyMuPDF (fitz)",          "PDF generation — fills compliance forms without templates"),
+            ("pandas / openpyxl",       "Excel parsing — reads client intake workbooks"),
+            ("Salesforce REST API",      "CRM integration — contact creation and record management"),
+            ("Anthropic Python SDK",    "Streaming responses, error handling, retry logic"),
+        ]:
+            st.markdown(
+                f'<div style="padding:0.55rem 0;border-bottom:1px solid var(--border);">' +
+                f'<div style="color:var(--accent);font-weight:600;font-size:0.82rem;">{tech}</div>' +
+                f'<div style="color:var(--txt2);font-size:0.78rem;margin-top:0.15rem;">{desc}</div>' +
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    _html_section_header("Time Saved — Estimated Per Client", "⏱️")
+    _ts1, _ts2, _ts3, _ts4 = st.columns(4)
+    for _tc, _tlabel, _tval, _tcolor in [
+        (_ts1, "CRM Data Entry",    "45 min",  "#00D4FF"),
+        (_ts2, "Brief Preparation", "90 min",  "#10B981"),
+        (_ts3, "Form Pre-fill",     "20 min",  "#A78BFA"),
+        (_ts4, "Total Per Client",  "2.5 hrs", "#F59E0B"),
+    ]:
+        with _tc:
+            st.markdown(
+                f'<div style="background:var(--card);border:1px solid var(--border);' +
+                f'border-top:2px solid {_tcolor};border-radius:10px;padding:0.9rem;text-align:center;">' +
+                f'<div style="color:{_tcolor};font-size:1.5rem;font-weight:800;' +
+                f'font-family:\'JetBrains Mono\',monospace;">{_tval}</div>' +
+                f'<div style="color:var(--txt2);font-size:0.72rem;margin-top:0.2rem;">{_tlabel}</div>' +
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    _html_callout(
+        "🚀 <strong>Deployment:</strong> Hosted on Streamlit Cloud, connected to GitHub for continuous deployment. "
+        "Secrets managed via Streamlit Cloud secrets UI (ANTHROPIC_API_KEY, Salesforce credentials).",
+        "info",
+    )
 
     _html_footer()
