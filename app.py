@@ -1180,13 +1180,13 @@ with st.sidebar:
     )
     if _sb_ctx_client and _all_known_clients():
         st.markdown(
-            f'<div style="font-size:0.7rem;color:#334155;margin-bottom:0.4rem;">'
-            f'Context: <span style="color:#94A3B8;">{_sb_ctx_client}</span></div>',
+            f'<div style="font-size:0.7rem;color:#64748B;margin-bottom:0.4rem;">'
+            f'Context: <span style="color:#CBD5E1;">{_sb_ctx_client}</span></div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            '<div style="font-size:0.7rem;color:#334155;margin-bottom:0.4rem;">'
+            '<div style="font-size:0.7rem;color:#64748B;margin-bottom:0.4rem;">'
             'General mode — no client selected</div>',
             unsafe_allow_html=True,
         )
@@ -1200,9 +1200,9 @@ with st.sidebar:
             f'<div style="background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.1);'
             f'border-radius:7px;padding:0.5rem 0.65rem;margin-bottom:0.4rem;'
             f'font-size:0.75rem;color:#94A3B8;max-height:160px;overflow-y:auto;">'
-            f'<span style="color:#475569;font-size:0.65rem;">YOU:</span><br>'
-            f'{last["q"]}<br><br>'
-            f'<span style="color:#475569;font-size:0.65rem;">MARCUS:</span><br>'
+            f'<span style="color:#64748B;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;">YOU:</span><br>'
+            f'<span style="color:#94A3B8;">{last["q"]}</span><br><br>'
+            f'<span style="color:#64748B;font-size:0.65rem;font-weight:700;letter-spacing:0.08em;">MARCUS:</span><br>'
             f'<span style="color:#CBD5E1;">{last["a"][:400]}{"…" if len(last["a"])>400 else ""}</span>'
             f'</div>',
             unsafe_allow_html=True,
