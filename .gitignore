@@ -14,6 +14,9 @@ data/registered_clients.json
 # Keep the data directory itself (Streamlit Cloud needs it to exist)
 !data/.gitkeep
 
+# PDF form templates — stored locally, too large for GitHub HTTPS push
+forms/*.pdf
+
 # macOS
 .DS_Store
 

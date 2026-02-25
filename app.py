@@ -15,6 +15,12 @@ import anthropic
 import streamlit as st
 import pandas as pd
 
+try:
+    import pdf_filler as _pdf_filler
+    _PDF_FILL_AVAILABLE = True
+except Exception:
+    _PDF_FILL_AVAILABLE = False
+
 # ── Resolve paths regardless of CWD ──────────────────────────────────────────
 HERE = Path(__file__).parent.resolve()
 os.chdir(HERE)
@@ -63,7 +69,7 @@ FORM_CATALOG = {
     },
     "IWSTrustApp": {
         "label": "IWS Trust Account Application",
-        "file":  "IWSTrustApp_Dec2024.pdf",
+        "file":  "IWSTrustApp_Dec2024.pdf",  # renamed from "(1)" copy
         "desc":  "Required for all Trust, Estate, or Entity accounts.",
         "acct_types": ["Trust", "Estate", "LLC", "Partnership"],
         "fields": [
@@ -1960,6 +1966,7 @@ elif page == "Client Onboarding":
     st.session_state.setdefault("ob_analysis",     None)
     st.session_state.setdefault("ob_selected_forms", [])
     st.session_state.setdefault("ob_prefills",     {})
+    st.session_state.setdefault("ob_filled_pdfs",  {})
     st.session_state.setdefault("ob_intake",       {})
     st.session_state.setdefault("ob_holders",      [])
     st.session_state.setdefault("ob_envelope_sent", False)
@@ -2105,27 +2112,80 @@ elif page == "Client Onboarding":
             _html_section_header("AI Pre-Fill Preview", "🤖")
             st.caption("Claude will map intake data to each form's required fields.")
 
-            if st.button("🔍 Generate Pre-Fill Preview", type="primary"):
-                prefills = {}
-                with st.status("Generating pre-fill data…", expanded=True) as sb:
-                    for fkey in new_sel:
-                        fname = FORM_CATALOG[fkey]["label"]
-                        st.write(f"Filling: **{fname}**…")
-                        raw_pf = _onboarding_ai_prefill(fkey, intake, holders)
-                        try:
-                            prefills[fkey] = json.loads(raw_pf)
-                        except Exception:
-                            prefills[fkey] = {"raw": raw_pf}
-                    sb.update(label="Pre-fill complete!", state="complete")
-                st.session_state["ob_prefills"] = prefills
-                st.rerun()
+            if _PDF_FILL_AVAILABLE:
+                if st.button("📄 Fill & Download PDFs", type="primary"):
+                    filled = {}
+                    errors = []
+                    with st.status("Filling PDFs with client data…", expanded=True) as sb:
+                        # Build co_client dict from holders list if joint
+                        co_client = None
+                        if len(holders) > 1:
+                            co_client = {"Full Name": holders[1]}
+                        for fkey in new_sel:
+                            fname = FORM_CATALOG[fkey]["label"]
+                            st.write(f"📝 Filling: **{fname}**…")
+                            try:
+                                pdf_bytes = _pdf_filler.fill_form(
+                                    fkey, intake, co_client=co_client
+                                )
+                                filled[fkey] = pdf_bytes
+                                st.write(f"✅ Done: **{fname}**")
+                            except Exception as e:
+                                errors.append(f"{fname}: {e}")
+                                st.write(f"⚠️ Error: **{fname}** — {e}")
+                        sb.update(
+                            label="PDFs ready for download!" if filled else "Completed with errors",
+                            state="complete" if filled else "error",
+                        )
+                    st.session_state["ob_filled_pdfs"] = filled
+                    st.rerun()
+            else:
+                if st.button("🔍 Generate Pre-Fill Preview", type="primary"):
+                    prefills = {}
+                    with st.status("Generating pre-fill data…", expanded=True) as sb:
+                        for fkey in new_sel:
+                            fname = FORM_CATALOG[fkey]["label"]
+                            st.write(f"Filling: **{fname}**…")
+                            raw_pf = _onboarding_ai_prefill(fkey, intake, holders)
+                            try:
+                                prefills[fkey] = json.loads(raw_pf)
+                            except Exception:
+                                prefills[fkey] = {"raw": raw_pf}
+                        sb.update(label="Pre-fill complete!", state="complete")
+                    st.session_state["ob_prefills"] = prefills
+                    st.rerun()
 
-            # Show prefill previews
+            # Download buttons for filled PDFs
+            if st.session_state["ob_filled_pdfs"]:
+                st.markdown("")
+                _html_section_header("Ready to Download", "⬇️")
+                for fkey in new_sel:
+                    pdf_bytes = st.session_state["ob_filled_pdfs"].get(fkey)
+                    if pdf_bytes:
+                        label    = FORM_CATALOG[fkey]["label"]
+                        filename = f"FILLED_{FORM_CATALOG[fkey]['file']}"
+                        col_name, col_btn = st.columns([3, 1])
+                        with col_name:
+                            st.markdown(
+                                f'<div style="color:#E2E8F0;padding:0.5rem 0;">'
+                                f'<span style="color:#10B981;">✓</span> &nbsp;{label}</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with col_btn:
+                            st.download_button(
+                                label="⬇️ Download",
+                                data=pdf_bytes,
+                                file_name=filename,
+                                mime="application/pdf",
+                                key=f"dl_{fkey}",
+                            )
+
+            # Optional: show prefill previews (AI mapping table)
             if st.session_state["ob_prefills"]:
                 for fkey in new_sel:
                     pf = st.session_state["ob_prefills"].get(fkey, {})
                     if pf:
-                        with st.expander(f"📝 {FORM_CATALOG[fkey]['label']} — Pre-Fill Data"):
+                        with st.expander(f"📝 {FORM_CATALOG[fkey]['label']} — Field Mapping"):
                             rows = [(k, v) for k, v in pf.items() if v and v != "—"]
                             if rows:
                                 df_pf = pd.DataFrame(rows, columns=["Form Field", "Pre-Filled Value"])
