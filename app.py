@@ -1132,6 +1132,106 @@ with st.sidebar:
                 unsafe_allow_html=True,
             )
 
+    # ── Persistent AI Assistant ───────────────────────────────────────────────
+    st.divider()
+    st.markdown(
+        '<div style="color:#00D4FF;font-size:0.62rem;font-weight:700;'
+        'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.5rem;">'
+        '🤖 AI Assistant</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Determine context: use whichever client is currently active
+    _sb_ctx_client = (
+        st.session_state.get("aac_client")
+        or st.session_state.get("mp_client")
+        or st.session_state.get("ob_client_sel")
+    )
+    if _sb_ctx_client and _all_known_clients():
+        st.markdown(
+            f'<div style="font-size:0.7rem;color:#334155;margin-bottom:0.4rem;">'
+            f'Context: <span style="color:#94A3B8;">{_sb_ctx_client}</span></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div style="font-size:0.7rem;color:#334155;margin-bottom:0.4rem;">'
+            'General mode — no client selected</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.session_state.setdefault("sb_history", [])
+
+    # Show last exchange inline
+    if st.session_state["sb_history"]:
+        last = st.session_state["sb_history"][-1]
+        st.markdown(
+            f'<div style="background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.1);'
+            f'border-radius:7px;padding:0.5rem 0.65rem;margin-bottom:0.4rem;'
+            f'font-size:0.75rem;color:#94A3B8;max-height:160px;overflow-y:auto;">'
+            f'<span style="color:#475569;font-size:0.65rem;">YOU:</span><br>'
+            f'{last["q"]}<br><br>'
+            f'<span style="color:#475569;font-size:0.65rem;">MARCUS:</span><br>'
+            f'<span style="color:#CBD5E1;">{last["a"][:400]}{"…" if len(last["a"])>400 else ""}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # Input form (forms work in sidebar; avoids page re-run on every keystroke)
+    with st.form(key="sb_ai_form", clear_on_submit=True):
+        sb_q = st.text_input(
+            "Ask anything…",
+            placeholder="e.g. What forms do I need for a joint account?",
+            label_visibility="collapsed",
+        )
+        col_send, col_clr = st.columns([3, 1])
+        with col_send:
+            sb_submitted = st.form_submit_button("Ask →", use_container_width=True)
+        with col_clr:
+            sb_clear = st.form_submit_button("✕", use_container_width=True)
+
+    if sb_clear:
+        st.session_state["sb_history"] = []
+        st.rerun()
+
+    if sb_submitted and sb_q.strip():
+        q = sb_q.strip()
+        if HAS_API_KEY:
+            # Build context: client data if available, otherwise general
+            if _sb_ctx_client:
+                _sb_context = _build_client_context(_sb_ctx_client)
+                _sb_system  = _build_advisor_system_prompt(_sb_ctx_client, _sb_context)
+            else:
+                _sb_system = (
+                    f"You are Marcus Reid, a senior wealth management advisor at {BRAND}. "
+                    "Answer questions about wealth management processes, onboarding, compliance, "
+                    "forms, and general advisory best practices. Be direct and concise."
+                )
+            # Build message history for context
+            _sb_msgs = []
+            for _h in st.session_state["sb_history"][-6:]:
+                _sb_msgs.append({"role": "user",      "content": _h["q"]})
+                _sb_msgs.append({"role": "assistant",  "content": _h["a"]})
+            _sb_msgs.append({"role": "user", "content": q})
+            try:
+                _sb_resp = anthropic.Anthropic().messages.create(
+                    model="claude-opus-4-6",
+                    max_tokens=1024,
+                    system=_sb_system,
+                    messages=_sb_msgs,
+                )
+                answer = _sb_resp.content[0].text
+            except Exception as exc:
+                answer = f"⚠ Error: {exc}"
+        else:
+            answer = (
+                "*(Mock mode — add ANTHROPIC_API_KEY for live responses)*\n\n"
+                "I'm Marcus Reid, your AI wealth advisor. I can help with client analysis, "
+                "onboarding processes, form selection, meeting prep, and more."
+            )
+        st.session_state["sb_history"].append({"q": q, "a": answer})
+        st.rerun()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Page — Register Client
